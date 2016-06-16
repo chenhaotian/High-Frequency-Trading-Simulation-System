@@ -6,21 +6,10 @@
 ##' @param EXdata hf data
 ##' @param ptradetime position of tradetime
 ##' @return information
-##' @export 
 ##' @author Chen
 ##'
 extractinfo <- function(info=c("tradetime","lastprice","volume","orderbook","HMOS","presettleprice"),EXdata,ptradetime,plastprice,pvolume,pbuyhands,pbuyprice,psellhands,psellprice,ppresettleprice,timeformat="%Y-%m-%d %H:%M:%OS"){
     match.arg(info,choices = c("tradetime","lastprice","volume","orderbook","HMOS","presettleprice"))
-    ## !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ## due to realtime data's nonstandard time format
-    if(info%in%c("tradetime","HMOS")){
-        if(timeformat=="%Y%m%d%H%M%OS"){
-            TRADETIME <- paste(substring(EXdata[ptradetime],1,14),substring(EXdata[ptradetime],15,17),sep = ".")
-        }
-        else{
-            TRADETIME <- EXdata[ptradetime]
-        }
-    }
     
     return(
         switch(info,
@@ -45,7 +34,6 @@ extractinfo <- function(info=c("tradetime","lastprice","volume","orderbook","HMO
 ##' @title capchange
 ##' @importFrom gtools defmacro
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
 capchange <- defmacro(TODAY,TOTAL,HANDS,COMMISSION,expr={
@@ -63,7 +51,6 @@ capchange <- defmacro(TODAY,TOTAL,HANDS,COMMISSION,expr={
     .GlobalEnv$tradingstates$capital$TODAY[idx] <- .GlobalEnv$tradingstates$capital$TODAY[idx]+handschange
     .GlobalEnv$tradingstates$capital$TOTAL[idx] <- .GlobalEnv$tradingstates$capital$TOTAL[idx]+handschange
     ## capital calculation needs prices of many different instruments......
-    ## omitted here..............
 })
 
 ##' updatecapital
@@ -72,7 +59,6 @@ capchange <- defmacro(TODAY,TOTAL,HANDS,COMMISSION,expr={
 ##' @title updatecapital
 ##' @importFrom gtools defmacro
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
 updatecapital <- function(instrumentid,direction,hands,action,tradeprice,fee,closeprior="today",multiplier=10000){
@@ -336,76 +322,46 @@ trackunclosed <- function(instrumentid,orderid,action,direction,tradehands,trade
 ##'
 ##' writeorderhistory
 ##' @title writeorderhistory
-##' @importFrom rredis redisSetContext redisSelect redisRPush
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
-writeorderhistory <- function(instrumentid,orderid,direction,hands,price,tradeprice,status,action,cost,tradetime=.GlobalEnv$tradingstates$currenttradetime,key=.GlobalEnv$key,redisEnv=.GlobalEnv$redisEnv,ctpmapper1=c(`1`="L",`-1`="S"),ctpmapper2=c(open="O",close="C",closetoday="J",closepreday="Z",cancel=""),realtime=.GlobalEnv$tradingstates$realtime){
+writeorderhistory <- function(instrumentid,orderid,direction,hands,price,tradeprice,status,action,cost,tradetime=.GlobalEnv$tradingstates$currenttradetime){
     ## write memory then return
-    if(is.null(realtime)){
-        .GlobalEnv$tradingstates$orderhistory <- rbind(
-            .GlobalEnv$tradingstates$orderhistory,
-            data.frame(
-                instrumentid=instrumentid,orderid=orderid,
-                direction=direction,price=price,
-                hands=hands,action=action,
-                tradetime=tradetime,
-                tradeprice=tradeprice,
-                cost=cost,status=status,
-                initialhands=ifelse(action=="cancel",0,.GlobalEnv$tradingstates$orders$initialhands[.GlobalEnv$tradingstates$orders$orderid==orderid]),
-                stringsAsFactors = FALSE)
-            )
-        return()
-    }
-
-    if(realtime){
-        redisSetContext(redisEnv)
-        redisSelect(1)
-        redisRPush(key=paste("o",key,sep=":"),value=charToRaw(paste(instrumentid, orderid,
-                                                  ctpmapper1[direction],
-                                                  price, hands,
-                                                  ctpmapper2[action],
-                                                  strftime(tradetime,"%H:%M:%S"), tradeprice, cost, status,.GlobalEnv$tradingstates$orders$initialhands[.GlobalEnv$tradingstates$orders$orderid==orderid],strftime(tradetime,"%Y%m%d"),strftime(Sys.Date(),"%Y%m%d"),sep = ",")))
-    }
-    else{
-        write(paste(instrumentid, orderid,ctpmapper1[direction],price, hands,ctpmapper2[action],tradetime, tradeprice, cost, status,.GlobalEnv$tradingstates$orders$initialhands[.GlobalEnv$tradingstates$orders$orderid==orderid],sep = ","),file="orderhistory",append = TRUE)
-    }
+    .GlobalEnv$tradingstates$orderhistory <- rbind(
+        .GlobalEnv$tradingstates$orderhistory,
+        data.frame(
+            instrumentid=instrumentid,orderid=orderid,
+            direction=direction,price=price,
+            hands=hands,action=action,
+            tradetime=tradetime,
+            tradeprice=tradeprice,
+            cost=cost,status=status,
+            initialhands=ifelse(action=="cancel",0,.GlobalEnv$tradingstates$orders$initialhands[.GlobalEnv$tradingstates$orders$orderid==orderid]),
+            stringsAsFactors = FALSE)
+    )
+    return()
 }
 
 ##' writecapitalhistory
 ##'
 ##' writecapitalhistory
 ##' @title writecapitalhistory
-##' @importFrom rredis redisSetContext redisSelect redisRPush
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
-writecapitalhistory <- function(instrumentid,tradeprice,tradehands,cost,tradetime=.GlobalEnv$tradingstates$currenttradetime,key=.GlobalEnv$key,redisEnv=.GlobalEnv$redisEnv,realtime=.GlobalEnv$tradingstates$realtime){
+writecapitalhistory <- function(instrumentid,tradeprice,tradehands,cost,tradetime=.GlobalEnv$tradingstates$currenttradetime){
     
-    if(is.null(realtime)){
-        .GlobalEnv$tradingstates$capitalhistory <- rbind(
-            .GlobalEnv$tradingstates$capitalhistory,
-            cbind(
-                .GlobalEnv$tradingstates$capital[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid,],
-                data.frame(
-                    tradetime=tradetime,
-                    tradeprice=tradeprice,tradehands=tradehands,cost=cost,
-                    stringsAsFactors=FALSE)
-                )
-            )
-        return()
-    }
-    
-    if(realtime){
-        redisSetContext(redisEnv)
-        redisSelect(1)
-        redisRPush(key=paste("c",key,sep=":"),value=charToRaw(paste(paste(.GlobalEnv$tradingstates$capital[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid,],collapse=","),strftime(tradetime,"%H:%M:%S"),tradeprice,tradehands,cost,sep = ",")))
-    }
-    else{
-        write(paste(paste(.GlobalEnv$tradingstates$capital[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid,],collapse=","),tradetime,tradeprice,tradehands,cost,sep = ","),file="capitalhistory",append = TRUE)
-    }
+    .GlobalEnv$tradingstates$capitalhistory <- rbind(
+        .GlobalEnv$tradingstates$capitalhistory,
+        cbind(
+            .GlobalEnv$tradingstates$capital[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid,],
+            data.frame(
+                tradetime=tradetime,
+                tradeprice=tradeprice,tradehands=tradehands,cost=cost,
+                stringsAsFactors=FALSE)
+        )
+    )
+    return()
 }
 
 ##' queryorder
@@ -414,7 +370,6 @@ writecapitalhistory <- function(instrumentid,tradeprice,tradehands,cost,tradetim
 ##' @title queryorder
 ##' @param orderid orderid to be queried, return all orders if orderid=NULL
 ##' @return order
-##' @export 
 ##' @author Chen
 ##'
 queryorder <- function(orderids=NULL){
@@ -431,7 +386,6 @@ queryorder <- function(orderids=NULL){
 ##' @title querycapital
 ##' @param instrumentids instrumentids to be queried, return all orders if instrumentids=NULL
 ##' @return instruments
-##' @export 
 ##' @author Chen
 ##'
 querycapital <- function(instrumentids=NULL){
@@ -642,7 +596,6 @@ canceldetector <- function(limit,book,direction){
 ##' @param redisEnv redis environment
 ##' @param timeformat time format
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
 updateinstrument <- function(instrumentid,lastprice,volume,orderbook,preorderbook,fee,closeprior="today",multiplier){
@@ -745,7 +698,6 @@ updateinstrument <- function(instrumentid,lastprice,volume,orderbook,preorderboo
 ##' priororders
 ##' @title priororders
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
 priororders <- function(mostrecentorderbook,orderid,direction,price){
@@ -766,7 +718,6 @@ priororders <- function(mostrecentorderbook,orderid,direction,price){
 ##' @title sucker
 ##' @importFrom gtools defmacro
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
 sucker <- defmacro(LONGHOLDINGS,SHORTHOLDINGS,expr = {
@@ -811,17 +762,18 @@ rearrangeorders <- function(orders,instrumentid){
 
 ##' ordersubmission
 ##' 
-##'  take different kinds of order actions, including open, close, closetoday, closepreday and cancel.
-##' 
+##'  different kinds of order actions, including open, close, closetoday, closepreday and cancel.
+##'
+##' @seealso \link{multisubmission} \link{timeoutchasesubmission} \link{timeoutsubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier
-##' @param orderid character, unique order id, can be generated by randomid()
+##' @param orderid character, specifying an unique order id, can be generated by randomid()
 ##' @param direction integer, specifying trading direction. 1 for long, -1 for short.
 ##' @param price numeric, specifiying order pirce.NOTE: when price=0, ordersubmission() will submit a market order; when price=NULL, ordersubmission() will take the corresponding bid1 or ask1 price as order price.
-##' @param hands integer, specifying hands to be submitted.
-##' @param action character, action can take value from one of "open","close","closetoday","closepreday" and "cancel". hands submitted in action='close' can not be greater than the sum of current holdings and queuing open hands.
+##' @param hands integer, specifying amount to be submitted.
+##' @param action character, specifying submit action, action can take value from one of "open","close","closetoday","closepreday" and "cancel". amout submitted in action='close' can not be greater than the sum of current holdings and queuing open hands.
 ##' @return order status
 ##' @export
-##' @author Chen
+##' @author Chen Haotian
 ##'
 ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price=0,hands=1,action="open",timeoutlist=FALSE,timeoutchase=FALSE,timeoutsleep=1,chaselist=FALSE,chasesleep=1,tradetime=.GlobalEnv$tradingstates$currenttradetime){
     
@@ -838,7 +790,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         return(5)
     }
     
-    if(any(c(hands%%1!=0, hands<=0, price<0 , !(direction%in%c(-1,1))))){
+    if(any(c(hands%%1!=0, hands<=0, isTRUE(price<0) , !(direction%in%c(-1,1))))){
         stop("illegal parameter values!")
     }
 
@@ -917,7 +869,8 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
 ##' multisubmission
 ##' 
 ##'  submit multiple orders, a simple wrapper of ordersubmission(). instrumentid, direction, price, hands and action must be of length one or the same length with the number of orders; orderid must be of length zero or the same length with the number of orders!
-##' 
+##'
+##' @seealso \link{ordersubmission} \link{timeoutchasesubmission} \link{timeoutsubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier
 ##' @param orderid character, if length(orderid)==0 (default), multisubmission will generate a random id for each order
 ##' @param direction integer, specifying trading direction. 1 for long, -1 for short.
@@ -977,11 +930,11 @@ multisubmission <- function(instrumentid="qtid",orderid=NULL,direction=1,price=N
     return()
 }
 
-
 ##' timeoutsubmission
 ##' 
 ##'  submit an order with timeout checking. The order will be canceled when it hasn't been executed for a duration longer than 'timeoutsleep'
-##' 
+##'
+##' @seealso \link{multisubmission} \link{timeoutchasesubmission} \link{ordersubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier
 ##' @param orderid character, unique order id, can be generated by randomid()
 ##' @param direction integer, specifying trading direction. 1 for long, -1 for short.
@@ -1010,7 +963,8 @@ timeoutsubmission <- function(instrumentid="qtid",orderid=NULL,direction=1,price
 ##' chasesubmission
 ##' 
 ##'  chase bid1 or ask1. after every 'chasesleep' seconds, order chaser will check wether current order's price equals to bid1 or ask1 price, if not, order chaser will replace it with a new one satisfying the price condition.
-##' 
+##'
+##' @seealso \link{multisubmission} \link{timeoutchasesubmission} \link{ordersubmissionsubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier
 ##' @param orderid character, unique order id, can be generated by randomid()
 ##' @param direction integer, specifying trading direction. 1 for long, -1 for short.
@@ -1039,7 +993,8 @@ chasesubmission <- function(instrumentid="qtid",orderid=NULL,direction=1,price=0
 ##' timeoutchasesubmission
 ##' 
 ##'  submit an order with timeout checking, chase bid1 or ask1 price to execute it when timeout. type ?timeoutsubmission and ?chasesubmission for more information
-##' 
+##'
+##' @seealso \link{multisubmission} \link{ordersubmission} \link{timeoutsubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier
 ##' @param orderid character, unique order id, can be generated by randomid()
 ##' @param direction integer, specifying trading direction. 1 for long, -1 for short.
@@ -1071,13 +1026,11 @@ timeoutchasesubmission <- function(instrumentid="qtid",orderid=NULL,direction=1,
     return()
 }
 
-
 ##' timeoutdetector
 ##' 
 ##'  detect timeout orders, ust be executed before orderchaser
 ##' 
 ##' @seealso \link{timeoutsubmission}
-##' @export
 ##' @author Chen
 ##'
 timeoutdetector <- function(tradetime=.GlobalEnv$tradingstates$currenttradetime){
@@ -1124,7 +1077,6 @@ chasedetector <- function(orders){
 ##'  chase bid1 or ask1 price
 ##' 
 ##' @seealso  \link{chasesubmission}
-##' @export
 ##' @author Chen
 ##'
 orderchaser <- function(tradetime=.GlobalEnv$tradingstates$currenttradetime){
@@ -1148,139 +1100,6 @@ orderchaser <- function(tradetime=.GlobalEnv$tradingstates$currenttradetime){
     cancelall(orderid = orders$orderid)
     ## automatically submit bid1 or ask1 price when price=NULL
     multisubmission(instrumentid = orders$instrumentid,direction = orders$direction,price=NULL,hands = orders$hands,action = orders$action,chaselist = TRUE,chasesleep=orders$chasesleep)
-}
-
-##' redisholdings
-##'
-##' redisholdings
-##' @title redisholdings
-##' @importFrom rredis redisSetContext redisSelect redisHGetAll
-##' @importFrom RJSONIO fromJSON
-##' @importFrom plyr ldply
-##' @return account and writeholdings
-##' @export 
-##' @author Chen
-##'
-redisholdings <- function(){
-    getAccount <- function(key){
-        if(substr(system("hostname", intern=TRUE),1,3) == "ali"){
-            redisConnect(host = "10.173.208.103", returnRef = TRUE,
-                         port = 6380, password = "Qutke.com")
-        }else{
-            redisConnect(host = "172.31.1.104", returnRef = TRUE,
-                         port = 6380, password = "Qutke.com")
-        }
-        tryCatch(redisSelect(1),
-                 error=function(e){
-                     sendalarm(content = "getAccount: Error in getting account information",id="003")
-                 },
-                 warning=function(w){
-                     sendalarm(content = "getAccount: Error in getting account information",id="003")
-                 }
-                 )
-        ## pars--------------------------------------
-        keys <- redisHGetAll(key = "s:strategies")
-        redisClose()
-        if(is.null(keys))
-            return(NULL)
-        accounts <- ldply(keys,function(key){
-            fromJSON(key)$account
-        })
-        names(accounts)[1] <- "key"
-        return(accounts[accounts$key==key,2])
-    }
-    wh <- FALSE
-    account <- getAccount(key)
-    if(length(account)==0 | isTRUE(account=="") | isTRUE(is.null(account))){
-        wh <- FALSE
-    }
-    else{
-        wh <- TRUE
-    }
-    assign("account",account,envir = globalenv())
-    return(wh)
-}
-
-##' writeholdings
-##'
-##' writeholdings
-##' @title writeholdings
-##' @importFrom rredis redisSetContext redisSelect redisHSet
-##' @return nothing
-##' @export 
-##' @author Chen
-##'
-writeholdings <- function(key=.GlobalEnv$key,account=.GlobalEnv$account,holdings,redisEnv=.GlobalEnv$redisEnv){
-    if (nrow(holdings) == 0){
-        return()
-    }
-    redisSetContext(redisEnv)
-    tryCatch(redisSelect(1),
-             error=function(e){
-                 sendalarm("redis connenction failed when write holding!",id="004")
-             },
-             warning=function(w){
-                 sendalarm("redis connenction failed when write holding!",id="005")
-             })
-    L <- nrow(holdings)
-    MEANLONG <- rep(0,L)
-    MEANSHORT <- MEANLONG
-    tmp <- numeric(1)
-    for(i in 1:L){
-        tmp <- meanopen(holdings$instrumentid[i],"long")
-        if(!is.null(tmp)){
-            MEANLONG[i] <- tmp
-        }
-        tmp <- meanopen(holdings$instrumentid[i],"short")
-        if(!is.null(tmp)){
-            MEANSHORT[i] <- tmp
-        }
-    }
-    
-    TABLE <- paste("t:",account,sep = "")
-    value <- paste("{",paste(paste(paste("\"",holdings$instrumentid,"\"",sep = ""),paste("[",paste(holdings$totallongholdings,abs(holdings$totalshortholdings),MEANLONG,MEANSHORT,sep = ","),"]",sep = ""),sep = ":"),collapse = ","),"}",sep = "")
-    tryCatch(redisHSet(TABLE,key,charToRaw(value)),
-             error=function(e){
-                 sendalarm("writeholding failed!",id="006")
-             },
-             warning=function(w){
-                 sendalarm("writeholding warning!",id="007")
-             })
-}
-
-##' readholdings
-##'
-##' readholdings
-##' @title readholdings
-##' @importFrom rredis redisSetContext redisSelect redisHGetAll
-##' @importFrom RJSONIO fromJSON
-##' @return nothing
-##' @export 
-##' @author Chen
-##'
-readholdings <- function(key=.GlobalEnv$key,account=.GlobalEnv$account,redisEnv=.GlobalEnv$redisEnv){
-    redisSetContext(redisEnv)
-    tryCatch(redisSelect(1),
-             error=function(e){
-                 sendalarm("redis connenction failed when reading holdings!",id="008")
-             },
-             warning=function(w){
-                 sendalarm("redis connenction failed when reading holdings!",id="009")
-             })
-    preholding <- redisHGetAll(paste("t:",account,sep=""))
-    if(length(preholding)==0){
-        warning("readholdings: previous holdings not found!")
-        return(NULL)
-    }
-    out <- NULL
-    tryCatch(out <- fromJSON(preholding[[key]]),
-             warning=function(w){
-                 warning("readholdings: error while read holdings")
-             },
-             error=function(e){
-                 warning("readholdings: error while read holdings")
-             })
-    return(out)
 }
 
 ##' lazyfunctions
@@ -1556,11 +1375,8 @@ closedprofit <- function(instrumentid){
 
 ##' initializestates
 ##' 
-##'  initialize simulator states, including history recoding method, simulation back ground functionality and many ohter simulator related parameters. return an environment named 'tradingstates'. queuing orders and capital state will be saved and kept updated in tradingstates during each simulation,see 'Details' for more information. *please read this documentation carefully before running any strategy with it!*
+##'  initialize simulator states, including simulation back ground functionality and many ohter simulator related parameters. return an environment named 'tradingstates'. queuing orders and capital state will be saved and kept updated in tradingstates, see 'Details' for more information. *please read this documentation carefully before running any strategy!*
 ##' 
-##' @param realtime logical, indicating wether to write orderhistory and capitalhistory to Redis or to local file. see 'Details' for more about order and capital history. write capital(order) history to Redis when realtime=TRUE, table named as c:key and o:key respectively. when realtime=FALSE, the two tables will be wrote to local files named 'orderhistory' and 'capitalhistory'. if realtime =NULL, order and capital history will be recorded in memory. see 'Details' section for more information about 'key'.
-##' @param writeholding logical, indicating write Redis holdings or not. write holdings to redis to synchronize target holdings when wirteholding=TRUE. set FALSE if you are running a test strategy.
-##' @param submitmethod character, specifying submit method. used in 'closeall', type ?closeall for more details
 ##' @param tc logical, indicating wehter to use a simulated tradecenter. when tc=TRUE, submitmethod will be coerced to 'lazysubmission'(type ?lazysubmission for details). see 'Details' for more about tradecenter
 ##' @param Sleep numeric, idle time length of simulated tradecenter, measured in seconds, default 1. see 'Details' for more information.
 ##' @param IMLAZY logical, pleas set it to TRUE if you are lazy. type ?initializeinstrument for more infromation.
@@ -1570,13 +1386,11 @@ closedprofit <- function(instrumentid){
 ##' @param closed logical, indicating wether to track all zero holding states, set closed=TRUE when you need to calculate close profit.
 ##' @param interdaily logical, indicating wether to support interdaily trading.
 ##' @return tradingstates env, an environment in .GlobelEnv containing all the parameters specified above.
-##' @details tradingstates: an environment containing all the simulators' parameters, there are two improtant dataframes stored in this envrionment, 'orders' and 'capital'. All current queuing orders will be stored as one row in 'orders' during simulation. if there haven't submit any orders or all the orders are traded(i.e. no queuing orders), 'orders' will be a data.frame with 0 rows. each instrument's capital state will be stored as one row in 'capital'. 'capital' has at least one row. one can use queryorder() and qureycapital() inside their strategy to fetch 'orders' and 'capital' from tradingstates.
+##' @details tradingstates: an environment containing all the simulators' parameters, there are two improtant dataframes stored in this envrionment, 'orders' and 'capital'. All current queuing orders will be recorded as one row in 'orders' during simulation. if there haven't submitted any orders or all the orders are traded(i.e. no queuing orders), 'orders' will be a data.frame with 0 rows. each instrument's capital state will be stored as one row in 'capital'. 'capital' has at least one row. one can use queryorder() and qureycapital() inside their strategy to fetch 'orders' and 'capital' from tradingstates.
 ##'
 ##' orderhistory: every changed order will be recorded as one additional row in orderhistory after every updating(submit new order, cancel order, partial traded, all traded ...) of orders, saved as either a comma separated table in Redis or a local file. columns of the table are: instrumentid,orderid,direction,price, hands,action,trade time,trade price,cost and status. 'cost' represent the commission of current update, it's calculated from parameter `fee` specified in initializeinstrument(), type ?initializeinstrument for more details; 'status' represent current order's status: 0, all traded; 1, part traded, rest queuing; 2, part traded, rest canceled; 3, no trade, queuing; 4, no trade, no queuing; 5, canceled; 6, submission failed;
 ##'
 ##' capitalhistory: the newest capital state will be recorded as one additional row in capitalhistory after each change, saved the same way as orderhistory. the columns are: instrumentid,today's long holdings, today's short holdings, previous long holdings, previous short holdings, total long holdings, total short holdings, cash, update time, trade price, traded hands and cost.
-##'
-##' key: strategy idnetifier specified by PFMS(when running on PFMS) or by yourself(when running on local machine). key is used to write all kinds of histories and read corresponding account infromation.
 ##'
 ##' tradecenter: a simulated trade center. automatically check for unsatisfied orders and repalce them with new ones to achieve target holdings(target holdings are set by lazysubmission).  'Sleep' set the idle time between each checking, default 0.
 ##' @seealso \link{initializeinstrument} \link{lazysubmission} \link{meanopen}
@@ -1588,14 +1402,8 @@ closedprofit <- function(instrumentid){
 ##' }
 ##' @author Chen
 ##' 
-initializestates <- function(realtime=TRUE,writeholding=FALSE,submitmethod="ordersubmission",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
+initializestates <- function(tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
     
-    if(writeholding){
-        ## writeholdings() need to write mean open price, thus require setting unclosed=TRUE.
-        if(!unclosed){
-            stop("unclosed must be TRUE when writeholding=TRUE")
-        }
-    }
 
     ## second digits, default 3
     options(digits.secs=DIGITSSECS)
@@ -1623,8 +1431,6 @@ initializestates <- function(realtime=TRUE,writeholding=FALSE,submitmethod="orde
         totallongholdings=numeric(),totalshortholdings=numeric(),
         cash=numeric(),stringsAsFactors=FALSE
         )
-    tradingstates$realtime <- realtime
-    tradingstates$submitmethod <- submitmethod
     tradingstates$tc <- tc              #trade center?
     ## target holding of trade center
     tradingstates$th <- data.frame(instrumentid=character(),longholding=numeric(),
@@ -1676,12 +1482,6 @@ initializestates <- function(realtime=TRUE,writeholding=FALSE,submitmethod="orde
     tradingstates$lastchange <- NULL
     tradingstates$Sleep <- Sleep
     
-    ## wirte holdings to redis!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    tradingstates$wh <- FALSE
-    if(writeholding){
-        tradingstates$wh <- redisholdings()
-    }
-
     ## instrument-closeprofit tracker
     tradingstates$closed <- closed
     tradingstates$closedtracker <- data.frame(instrumentid=character(),cash=numeric(),stringsAsFactors=FALSE)
@@ -1778,7 +1578,6 @@ lazyexpressions <- function(instrumentid,ninstruments=NULL,type="specific"){
 ##' @param multiplier numeric, quoted price * multiplier = real price.
 ##' @param timeformat character, specifying time format of the data source.
 ##' @param endoftheday character, specifying ending time of each trading day, simulator will move holdings to preholdings whenever new tradetime pass through 'endoftheday'.
-##' @param readholding logical, wether to read previous holdings from Redis. if readholding=TRUE, simulator will search for corresponding 'account' of current stratetgy's 'key', and retrive the holdings information from it. Set to FALSE if there's no account information available.
 ##' @return an envrionment in .GlobalEnv containing all the informations specified above. the env's name is specified by parameter 'instrument'.
 ##' @details IMLAZY: if IMLAZY=TRUE, initializeinstrument() will generate a bunch of expressions named INSTRUMENTID.ATTRIBUTE.STATE or INSTRUMENTID.ATTRIBUTE. for example, TF1603.longopen.non represents 'TF1603 has no long open order in queue' and TF1603.longopen represents 'all TF1603's long open orders', you can retrive prices of all the long open orders of TF1603 by typing TF1603.longopenX$X'price'. see 'Examples' for more information. part of the expressions are listed below:
 ##'          INSTRUMENTID.orders.non
@@ -1843,7 +1642,7 @@ lazyexpressions <- function(instrumentid,ninstruments=NULL,type="specific"){
 ##' }
 ##' @author Chen
 ##'
-initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,ppresettleprice,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000,readholding=FALSE){
+initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,ppresettleprice,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000){
 
     ## IMPORTANT NOTE:
     ## initialize only one instrument at a time!
@@ -1978,58 +1777,6 @@ initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,pse
         .GlobalEnv$tradingstates$capital$totallongholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
         .GlobalEnv$tradingstates$capital$totalshortholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
         .GlobalEnv$tradingstates$capital$cash[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- CASH
-    }
-    
-    ## initialize pre holdings
-    if(readholding){
-        redisholdings()
-        if(!exists("account",envir=.GlobalEnv))
-            sotp(paste("can't find any account info of key: ",key,sep=""))
-        preholding <- numeric(2)
-        tryCatch(preholding <- readholdings()[[instrumentid]],
-                               error=function(e){
-                                   warning("readholdings error!!!!!!!!")
-                               },
-                               warning=function(w){
-                                   warning("readholdings error!!!!!!!!")
-                               }
-                 )
-        if(length(preholding)!=0){
-            .GlobalEnv$tradingstates$capital$longholdingspreday[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- preholding[1]
-            .GlobalEnv$tradingstates$capital$shortholdingspreday[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- -preholding[2]
-            .GlobalEnv$tradingstates$capital$totallongholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- preholding[1]
-            .GlobalEnv$tradingstates$capital$totalshortholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- -preholding[2]
-            ## iniitalize unclosed tracker!!!!!!!!!!!!!!!!!!!!!!!!!!
-            if(preholding[1]>0.000001){
-                .GlobalEnv$tradingstates$unclosedlong <- rbind(
-                    .GlobalEnv$tradingstates$unclosedlong,
-                    data.frame(
-                        instrumentid=instrumentid,orderid="prelong",
-                        action="open",
-                        direction=1,
-                        tradehands=preholding[1],
-                        tradeprice=0,   #!!! waiting to be filled
-                        stringsAsFactors = FALSE)
-                    )
-                }
-            if(preholding[2]>0.000001){
-                .GlobalEnv$tradingstates$unclosedshort <- rbind(
-                    .GlobalEnv$tradingstates$unclosedshort,
-                    data.frame(
-                        instrumentid=instrumentid,orderid="preshort",
-                        action="open",
-                        direction=-1,
-                        tradehands=preholding[2],
-                        tradeprice=0,   #!!! waiting to be filled
-                        stringsAsFactors = FALSE)
-                )
-            }
-            .GlobalEnv$tradingstates$unclosedsettleprice[instrumentid] <- TRUE
-            ## iniitalize unclosed tracker!!!!!!!!!!!!!!!!!!!!!!!!!!
-        }
-        else{
-            warning(paste("initializeinstrument: can't find any previous holdings of ",instrumentid,sep=""))
-        }
     }
     
     ## initialize target holding(after read holding) for trade center
@@ -2210,13 +1957,9 @@ verboselimitpriors <- function(tradetime=.GlobalEnv$tradingstates$currenttradeti
 ##'   a simple wrapper of initializestates() and initializeinstrument() for Treasury Futures. type ?initializestates and ?initializeinstrument for details.
 ##'
 ##' @param realtimeDATA logical, indicating wether to use realtime data.
-##' @param realtime logical, indicating wether to write orderhistory and capitalhistory to Redis or to local file. see 'Details' for more about order and capital history. write capital(order) history to Redis when realtime=TRUE, table named as c:key and o:key respectively. see 'Details' section for more information about 'key'; when realtime=FALSE, the two tables will be wrote to local files named 'orderhistory' and 'capitalhistory'. if realtime =NULL, order and capital history will be recorded in memory.
-##' @param writeholding logical, indicating write Redis holdings or not. write holdings to redis to synchronize target holdings when wirteholding=TRUE. set FALSE if you are running a backtest.
-##' @param submitmethod character, specifying submit method. used in 'closeall', type ?closeall for more details
 ##' @param TFs character, specifying TF ids to be initialized.
 ##' @param fee named numeric, specifying conmissions of different actions, including open, close, closetoday and closepreday. 'cost' in orderhistory and capitalhistory are result calculated by 'fee'.
 ##' @param closeprior character, specifying close priority when specified action='close' in ordersubmission. closeprior can only be one of 'today' and 'preday'. when closeprior='today', ordersubmission will close today's holdings prior than previous days', vise versa. type ?ordersubmission for details.
-##' @param readholding logical, wether to read previous holdings from Redis. if readholding=TRUE, simulator will search for corresponding 'account' of current stratetgy's 'key', and retrive the holdings information from it. Set to FALSE if there's no account information available.
 ##' @param tc logical, indicating wehter to use a simulated tradecenter. when tc=TRUE, submitmethod will be coerced to 'lazysubmission'(type ?lazysubmission for details). see 'Details' for more about tradecenter
 ##' @param Sleep numeric, idle time length of simulated tradecenter, measured in seconds, default 1. see 'Details' for more information.
 ##' @param IMLAZY logical, pleas set it to TRUE if you are lazy. type ?initializeinstrument for more infromation.
@@ -2230,14 +1973,14 @@ verboselimitpriors <- function(tradetime=.GlobalEnv$tradingstates$currenttradeti
 ##' @export 
 ##' @author Chen
 ##'
-initializeTF <- function(realtimeDATA=TRUE,realtime=NULL,writeholding=FALSE,submitmethod="perfectexecution",TFs="TF1512",fee=c(long=0.00000225,short=0.00000225,closetoday=0.00000225,closepreday=0.00000225),closeprior="today",readholding=FALSE,tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
+initializeTF <- function(realtimeDATA=TRUE,TFs="TF1512",fee=c(long=0.00000225,short=0.00000225,closetoday=0.00000225,closepreday=0.00000225),closeprior="today",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
 
     if(missing(realtimeDATA)){
         stop("realtimeDATA must be specified!")
     }
     
     ## initialize states
-    initializestates(realtime=realtime,writeholding=writeholding,submitmethod=submitmethod,tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
+    initializestates(tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
     
     ## initialize instruments
     if(realtimeDATA){
@@ -2253,7 +1996,7 @@ initializeTF <- function(realtimeDATA=TRUE,realtime=NULL,writeholding=FALSE,subm
                                  closeprior = "today",
                                  timeformat="%Y%m%d%H%M%OS",
                                  endoftheday="15:15:00.000",
-                                 multiplier=10000,readholding=readholding)
+                                 multiplier=10000)
         }
     }
     else{
@@ -2269,15 +2012,10 @@ initializeTF <- function(realtimeDATA=TRUE,realtime=NULL,writeholding=FALSE,subm
                                  closeprior = "today",
                                  timeformat = "%Y-%m-%d %H:%M:%OS",
                                  endoftheday="15:15:00.000",
-                                 multiplier = 10000,readholding=readholding)
+                                 multiplier = 10000)
         }
     }
     
-    ## simulation or not
-    orderSync <- switch(submitmethod,
-                        perfectexecution=perfectexecution,
-                        ordersubmission=ordersubmission,
-                        lazysubmission=lazysubmission)
     ## if trade center == TRUE, then use lazysubmission()
     if(.GlobalEnv$tradingstates$tc){
         orderSync <- lazysubmission
@@ -2293,30 +2031,20 @@ initializeSimulator <- function(instruments=c("TF1512","ZN1603")){
 ##'
 ##' perfectexecution
 ##' @title perfectexecution
-##' @param  realtime         TRUE: use realtime data, wirte order and capital history to redis; FALSE: use history data, wirte order and capital history to local file
-##' @param writeholding     TRUE: write holdings to redis; FALSE: don't write holdings to redis
-##' @param simulation       TRUE: ordersubmission();FALSE: perfectexecution()
-##' @importFrom httr GET
 ##' @return nothing
 ##' @export 
 ##' @author Chen
 ##'
 perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,action,type="limit",tradetime=.GlobalEnv$tradingstates$currenttradetime){
 
-    if(any(hands<=0))
-        stop("hands must be greater than zero!")
-    if(is(direction,"character") | any(!direction%in%c(-1,1)))
-        stop("direction must be numeric or integer of value  1 or -1!")
-    if(any(price<=0))
-        stop("price must be greater than 0!")
-    if(any(!action%in%c("open","close")))
-        stop("action can only be open or close!")
+    if(any(hands<=0)) stop("hands must be greater than zero!")
+    if(is(direction,"character") | any(!direction%in%c(-1,1))) stop("direction must be numeric or integer of value  1 or -1!")
+    if(any(price<=0)) stop("price must be greater than 0!")
+    if(any(!action%in%c("open","close"))) stop("action can only be open or close!")
     ## if(missing(type))
     ## stop("order type not found!")
-    if(any(!type%in%c("limit","market")))
-        stop("type must be one of limit or market!")
-    if(length(unique(type))>1)
-        stop("can only submitt one type of orders!")
+    if(any(!type%in%c("limit","market"))) stop("type must be one of limit or market!")
+    if(length(unique(type))>1) stop("can only submitt one type of orders!")
     
     ## multiple orders
     tryCatch(orders <- data.frame(instrumentid=instrumentid,direction=direction,price=price,hands=hands,action=action,stringsAsFactors = FALSE),
@@ -2342,42 +2070,7 @@ perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,acti
         trackunclosed(orders$instrumentid[i],id,orders$action[i],orders$direction[i],orders$hands[i],orders$price[i])
     }
     
-    ## write redis holdings
-    if(.GlobalEnv$tradingstates$wh){
-        writeholdings(holdings=.GlobalEnv$tradingstates$capital)
-        print(paste("host name: ",system("hostname", intern=TRUE),sep=""))
-        if(type[1]=="limit"){
-            if(substr(system("hostname", intern=TRUE),1,3) == "ali"){
-                print("sending http get:")
-                URL <- paste("http://10.47.200.33:3009/sync/(",.GlobalEnv$account,")/limit",sep="")
-                print(URL)
-                tryCatch(httr::GET(URL),error=function(e){sendalarm(content="perfect execution:http request failed",id = "012")},warning=function(w){sendalarm("perfect execution:http request failed",id="012")})
-                print("http get sent")
-            }else{
-                print("sending http get:")
-                URL <- paste("http://172.31.36.2:3009/sync/(",.GlobalEnv$account,")/limit",sep="")
-                print(URL)
-                tryCatch(httr::GET(URL),error=function(e){sendalarm(content="perfect execution:http request failed",id = "012")},warning=function(w){sendalarm("perfect execution:http request failed",id="012")})
-                print("http get sent")
-            }
-        }else{ #type=="market"
-            if(substr(system("hostname", intern=TRUE),1,3) == "ali"){
-                print("sending http get:")
-                URL <- paste("http://10.47.200.33:3009/sync/(",.GlobalEnv$account,")/market",sep="")
-                print(URL)
-                tryCatch(httr::GET(URL),error=function(e){sendalarm(content="perfect execution:http request failed",id = "012")},warning=function(w){sendalarm("perfect execution:http request failed",id="012")})
-                print("http get sent")
-            }else{
-                print("sending http get:")
-                URL <- paste("http://172.31.36.2:3009/sync/(",.GlobalEnv$account,")/market",sep="")
-                print(URL)
-                tryCatch(httr::GET(URL),error=function(e){sendalarm(content="perfect execution:http request failed",id = "012")},warning=function(w){sendalarm("perfect execution:http request failed",id="012")})
-                print("http get sent")
-            }
-        }
-    }
 }
-
 
 ##' closeall
 ##'
@@ -2403,60 +2096,15 @@ closeall <- function(instrumentid="qtid",price=NULL,type="limit"){
     }
     match.arg(type,c("limit","market"))
 
-    ## perfectexecution
-    if(.GlobalEnv$tradingstates$submitmethod=="perfectexecution"){
-        if(is.null(price))
-            stop("NULL price in closeall.perfectexecution!")
-        if(capital$totallongholdings!=0 & capital$totalshortholdings==0)
-            perfectexecution(instrumentid = instrumentid,orderid = "xxx",
-                             direction = -1,price = price,hands = capital$totallongholdings,
-                             action = "close",type=type)
-        else if(capital$totalshortholdings!=0 & capital$totallongholdings==0)
-            perfectexecution(instrumentid = instrumentid,orderid = "xxx",
-                             direction = 1,price = price,hands = -capital$totalshortholdings,
-                             action = "close",type=type)
-        else if(capital$totalshortholdings!=0 & capital$totallongholdings!=0) #multi orders
-            perfectexecution(instrumentid = instrumentid,
-                             orderid = "xxx",
-                             direction = c(1,-1),
-                             price = price,
-                             hands = c(-capital$totalshortholdings,capital$totallongholdings),
-                             action = "close",type=type)
-    }
-    
     ## ordersubmission
-    else{
-        if(capital$totallongholdings!=0)
-            ordersubmission(instrumentid=instrumentid,orderid = randomid(5),
-                            direction = -1,price = 0,hands=capital$totallongholdings,action = "close")
-        if(capital$totalshortholdings!=0)
-            ordersubmission(instrumentid=instrumentid,orderid = randomid(5),
-                            direction = 1,price = 0,hands= -capital$totalshortholdings,action = "close")
-    }
+    if(capital$totallongholdings!=0)
+        ordersubmission(instrumentid=instrumentid,orderid = randomid(5),
+                        direction = -1,price = 0,hands=capital$totallongholdings,action = "close")
+    if(capital$totalshortholdings!=0)
+        ordersubmission(instrumentid=instrumentid,orderid = randomid(5),
+                        direction = 1,price = 0,hands= -capital$totalshortholdings,action = "close")
     
     return()
-}
-
-##' marketOrderSync
-##'
-##' marketOrderSync
-##' @title marketOrderSync
-##' @return nothing
-##' @importFrom httr GET
-##' @export 
-##' @author Chen
-##'
-marketOrderSync <- function(){
-    if(.GlobalEnv$tradingstates$wh){
-        if(substr(system("hostname", intern=TRUE),1,3) == "ali"){
-            httr::GET(paste("http://10.47.200.33:3009/sync/(",.GlobalEnv$account,")/market",sep=""))
-        }else{
-            httr::GET(paste("http://172.31.36.2:3009/sync/(",.GlobalEnv$account,")/market",sep=""))
-        }
-    }
-    else{
-        stop("set writeholding=TRUE before synchronize holdings!!")
-    }
 }
 
 ##' cancelorders
@@ -2480,7 +2128,6 @@ cancelorders <- function(orders){
 ##' 
 ##'  cancel all satisfied orders
 ##' 
-##' @param tradetime character, time in current tick
 ##' @param instrumentid character, specifying a filter for instrument identifiers.
 ##' @param direction integer, specifying a filter for trading directions. 1 for long and -1 for short.
 ##' @param pricemin numeric, specifying a filter for price lower limit.
@@ -2541,7 +2188,7 @@ cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL
 
 ##' replaceall
 ##' 
-##'  replace all satisfied orders with a order of a new price, keep instrumentid, hands, direction and action unchanged.
+##'  replace all satisfied orders with one new order which has a new price and a new hands equal to the cumulated hands of orders replaced.
 ##' 
 ##' @param tradetime character, time in current tick.
 ##' @param instrumentid character, specifying a filter for instrument identifier.
@@ -2555,7 +2202,7 @@ cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL
 ##' @export
 ##' @examples
 ##'\dontrun{
-##' ## find all orders satisfy direction==-1 and action=='open' and price <=101, replace them with a new order of price 100.01.
+##' ## find all orders satisfy direction==-1 and action=='open' and price <=101, replace them with a new order with price 100.01.
 ##' replaceall(tradetime,"TF1512",direction=-1,action='open',pricemax=101,newprice=100.01)
 ##' }
 ##' @author Chen
@@ -2593,14 +2240,12 @@ replaceall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NUL
     return()
 }
 
-tradecenter_force <- function(){}
 
 ##' tradecenter
 ##'
 ##' tradecenter
 ##' @title tradecenter
 ##' @return nothing
-##' @export 
 ##' @author Chen
 ##'
 tradecenter <- function(instrumentid,tradetime=.GlobalEnv$tradingstates$currenttradetime){
@@ -2723,7 +2368,6 @@ tradecenter <- function(instrumentid,tradetime=.GlobalEnv$tradingstates$currentt
 ##'
 ##'   submit target holdings, trade center will cancel all irrevelant orders and chase bid1 or ask1 price automatically to achieve target holdings. this function can only be used when set tc=TRUE in initializestates()
 ##' 
-##' @param tradetime character, time in current tick
 ##' @param instrumentid character, instrument identifier
 ##' @param longholding integer, specifying target long holdings of 'instrumentid', longholding >=0
 ##' @param shortholding integer, specifying target short holdings of 'instrumentid', shortholding <= 0
@@ -2755,74 +2399,9 @@ lazysubmission <- function(instrumentid,longholding=NULL,shortholding=NULL,trade
     .GlobalEnv$tradingstates$lastchange[instrumentid] <- tradetime
     tradecenter(instrumentid)
 
-    if(.GlobalEnv$tradingstates$wh){
-        holdings <- .GlobalEnv$tradingstates$th
-        names(holdings) <- c("instrumentid","totallongholdings","totalshortholdings")
-        writeholdings(holdings=holdings)
-        print(paste("host name: ",system("hostname", intern=TRUE),sep=""))
-        if(substr(system("hostname", intern=TRUE),1,3) == "ali"){
-            print("sending http get:")
-            URL <- paste("http://10.47.200.33:3009/sync/(",.GlobalEnv$account,")/limit",sep="")
-            print(URL)
-            tryCatch(httr::GET(URL),error=function(e){sendalarm(content="lazysubmission:http request failed",id = "013")},warning=function(w){sendalarm("lazysubmission:http request failed",id="013")})
-            print("http get sent")
-        }else{
-            print("sending http get:")
-            URL <- paste("http://172.31.36.2:3009/sync/(",.GlobalEnv$account,")/limit",sep="")
-            print(URL)
-            tryCatch(httr::GET(URL),error=function(e){sendalarm(content="lazysubmission:http request failed",id = "013")},warning=function(w){sendalarm("lazysubmission:http request failed",id="013")})
-            print("http get sent")
-        }
-    }
-    
 }
 
-##' getpars
-##'
-##'   get strategy parameters from redis, return a named vector or a list.
-##' 
-##' @param key character, specifying strategy key
-##' @param CONTENT character, specifying content to be extracted, can be one of "cash", "account", "risk" and "code".
-##' @return named vector or a list
-##' @export
-##' @examples
-##'\dontrun{
-##'   size <- getpars()[['size']]
-##' }
-##' @author Chen
-##'
-getpars <- function(key=.GlobalEnv$key,CONTENT="code"){
-    if(is.null(key)|isTRUE(!is.null(key)&(key==""|key==" "))){
-        stop("key can not be empty!")
-    }
-    if(substr(system("hostname", intern=TRUE),1,3) == "ali"){
-        redisConnect(host = "10.173.208.103", returnRef = TRUE,
-                     port = 6380, password = "Qutke.com")
-    }
-    else{
-        redisConnect(host = "172.31.1.104", returnRef = TRUE,
-                     port = 6380, password = "Qutke.com")
-    }
-    tryCatch(redisSelect(1),
-             error=function(e){
-                 sendalarm("getpars: redis connection failed",id="010")
-             },
-             warning=function(w){
-                 sendalarm("getpars: redis connection failed",id="011")
-             })
-             
-    ## pars--------------------------------------
-    keys <- redisHGetAll(key = "s:strategies")
-    redisClose()
-    pars <- keys[[key]]
-    if(is.null(pars)){
-        warning("can't find any parameters of key: ",key)
-        return()
-    }
-    else{
-        return(fromJSON(pars)[[CONTENT]])
-    }
-}
+
 
 ## analysing tools
 ## 1.specific functions------------------
@@ -3080,7 +2659,6 @@ summaryvpplot <- function(pd,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMM
 }
 
 
-
 ## 2.general functions---------------
 ## 2.1 draw-down sequence
 drawdown <- function(pl){
@@ -3145,10 +2723,6 @@ maxsuccessivechange <- function(sequence,direction,DIFF=TRUE,filtzeros=TRUE){
 ##' @author Chen
 tradesummary <- function(instrumentdata,instrumentid="qtid",limitorders=NULL,starttime="09:15:00.000",endtime="15:15:00.000",SUMMARY=TRUE,TRADED=TRUE){
     
-    if(!is.null(tradingstates$realtime)){
-        stop("can't find any history records! pleas set realtime=NULL in initializestates() and restart the backtest.")
-    }
-
     ## data manipulation
     instrumentdata <- datamanipulation(instrumentdata,instrumentid)
 
@@ -3343,23 +2917,6 @@ checklimit <- function(instrumentdata,orderid){
     print(p1,vp=vplayout(9:10,1:10))
 }
 
-##' sendalarm
-##' 
-##'  send alarm
-##' 
-##' @param content character, content to be sent.
-##' @param id integer, specifying alarm id, must be unique for each running strategy, or there might be a conflict
-##' @return nothing
-##' @export
-##' @examples
-##'\dontrun{
-##'  sendalarm("holy shit!")
-##' }
-##'
-sendalarm <- function(content,id,sendto=c("wangh","zhangfy","chenht","wenw","linwl","wangyf")){
-    ## removed
-}
-
 
 ##' initializeEnv
 ##' 
@@ -3374,7 +2931,7 @@ sendalarm <- function(content,id,sendto=c("wangh","zhangfy","chenht","wenw","lin
 ##' initializeENV(realtimeDATA = FALSE,ENVname = "TF",instruments = instruments[2],exchange = detail$exchanges[2],multiplier = detail$multipliers[2],endoftheday = detail$endofthedays[2])
 ##' }
 ##'
-initializeENV <- function(realtimeDATA,instruments,exchanges,multipliers,endofthedays,realtime=NULL,writeholding=FALSE,submitmethod="perfectexecution",fee=c(long=0.000004,short=0.000004,closetoday=0.000004,closepreday=0.000004),closeprior="preday",readholding=FALSE,tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
+initializeENV <- function(realtimeDATA,instruments,exchanges,multipliers,endofthedays,fee=c(long=0.000004,short=0.000004,closetoday=0.000004,closepreday=0.000004),closeprior="preday",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
     if(missing(realtimeDATA)|missing(exchanges)|missing(multipliers)|missing(endofthedays)){
         stop("realtimeDATA, exchanges, multipliers and endofthedays must be specified!")
     }
@@ -3383,7 +2940,7 @@ initializeENV <- function(realtimeDATA,instruments,exchanges,multipliers,endofth
     }
 
     ## initialize states
-    initializestates(realtime=realtime,writeholding=writeholding,submitmethod=submitmethod,tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
+    initializestates(tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
 
     tryCatch(tmp <- data.frame(instruments=instruments,exchanges=exchanges,multipliers=multipliers,endofthedays=endofthedays,stringsAsFactors = FALSE),
              warning=function(w){
@@ -3481,12 +3038,11 @@ initializeENV <- function(realtimeDATA,instruments,exchanges,multipliers,endofth
                              closeprior = closeprior,
                              timeformat= timeformat,
                              endoftheday= endoftheday,
-                             multiplier=multiplier,
-                             readholding=readholding)
+                             multiplier=multiplier)
     }
 }
 
-initializeENV.rough <- function(realtimeDATA,instruments,exchanges,multipliers,endofthedays,realtime=NULL,writeholding=FALSE,submitmethod="perfectexecution",fee=c(long=0.000004,short=0.000004,closetoday=0.000004,closepreday=0.000004),closeprior="preday",readholding=FALSE,tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
+initializeENV.rough <- function(realtimeDATA,instruments,exchanges,multipliers,endofthedays,fee=c(long=0.000004,short=0.000004,closetoday=0.000004,closepreday=0.000004),closeprior="preday",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
     if(missing(realtimeDATA)|missing(exchanges)|missing(multipliers)|missing(endofthedays)){
         stop("realtimeDATA, exchanges, multipliers and endofthedays must be specified!")
     }
@@ -3495,7 +3051,7 @@ initializeENV.rough <- function(realtimeDATA,instruments,exchanges,multipliers,e
     }
 
     ## initialize states
-    initializestates(realtime=realtime,writeholding=writeholding,submitmethod=submitmethod,tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
+    initializestates(tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
 
     tryCatch(tmp <- data.frame(instruments=instruments,exchanges=exchanges,multipliers=multipliers,endofthedays=endofthedays,stringsAsFactors = FALSE),
              warning=function(w){
@@ -3593,8 +3149,7 @@ initializeENV.rough <- function(realtimeDATA,instruments,exchanges,multipliers,e
                              closeprior = closeprior,
                              timeformat= timeformat,
                              endoftheday= endoftheday,
-                             multiplier=multiplier,
-                             readholding=readholding)
+                             multiplier=multiplier)
     }
 }
 
@@ -3862,236 +3417,47 @@ BSO <- function(orderbook,preorderbook,bsi){
 }
 
 
-## 1. agents: output target holdings' signal
-## 2. riskmanager
-## 3. assetallocator
+## ## 1. agents: output target holdings' signal
+## ## 2. riskmanager
+## ## 3. assetallocator
 
-agent <- function(){}
-riskmanager.instrument <- function(){}
-## input: pnls of all instruments
-riskmanager.portfolio <- function(){}
-allocator <- function(){}
+## agent <- function(){}
+## riskmanager.instrument <- function(){}
+## ## input: pnls of all instruments
+## riskmanager.portfolio <- function(){}
+## allocator <- function(){}
 
-agent.backtest <- function(){}
+## agent.backtest <- function(){}
 
-## series: numeric, price series
-## trades: integer, indicating trade indexes in price series
-## targetholdings: integer, target long or short holdings, length(targetholdings) must equal length(trades)
-## pertradedd: numeric, each trade's max allowable drawdown
-## cumdd: numeric, max allowable drawdown
-riskmanager.instrument.backtest <- function(series,trades,targetholdings,pertradedd,cumdd,slippage){
-    L <- length(series)
-    if(length(trades)!=length(targetholdings)){stop("unequal number of trades")}
-    ## 1. per trade, return pl of each trade
-    eachtrade <- sapply(1:length(trades),function(i){
-        pl <- (series[trades[i]:min(trades[i+1],L,na.rm=TRUE)]-series[trades[i]])*targetholdings[i]-slippage*abs(targetholdings[i])
-        STOP <- which(drawdown(pl)<=pertradedd)[1]
-        if(is.na(STOP)){
-            return(tail(pl,1))
-        }else{
-            return(pl[STOP])
-        }
-    })
-    ## 2. cumtrade
-    ## STOP <- which(drawdown(eachtrade)<=cumdd)[1]
-    STOP <- which(drawdown(cumsum(eachtrade))<=cumdd)[1]
-    if(is.na(STOP)){
-        return(eachtrade)
-    }else{
-        ## return(sum(eachtrade[1:STOP]))
-        return(eachtrade[1:STOP])
-    }
-}
-
-riskmanager.portfolio.backtest <- function(){}
-allocator.backtest <- function(){}
-
-
-
-## tmp5 <- smes(y,method="rv",on = "days",timeindex = index(tens),lambdas = 20*(1:10),nsds = 0.3*(1:5),regulizationtype = "L-L2",slippage = 0)
-
-## tmp4 <- smes(y,method="rv",on = "days",timeindex = index(tens),lambdas = 20*(1:10),nsds = 0.25*(1:5),regulizationtype = "L-L2",slippage = 0)
-
-## col <- rep("red",length(TEST))
-## col[TESTfilter$BT<0] <- "blue"
-## plot(TEST,col=col)
-
-    
-## lambda <-20
-## regulizationtype <- "L1"
-
-## ym2 <- optim(par,obj,method = "L-BFGS-B",lower = lower,upper = upper)
-
-## optim(par,obj,method = "L-BFGS-B",lower = lower,upper = upper)
-
-## plot(tail(as.numeric(tens[,3]),1600),type = "l")
-
-## hf 100 0.25
-## IDX <- 50*(0:40)+21
-## length(unlist(tmp4$trades[IDX]))/41
-## plot(unlist(tmp4$trades[IDX]),type = "l")
-
-
-## hf 160 0.25
-## IDX <- 50*(0:40)+31
-## length(unlist(tmp4$trades[IDX]))/41
-## plot(unlist(tmp4$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp4$trades[IDX])),type = "l")
-
-## ## hf 20 1.25
-## IDX <- 50*(0:40)+5
-## length(unlist(tmp4$trades[IDX]))/41
-## plot(unlist(tmp4$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp4$trades[IDX])),type = "l")
-
-
-## ## twenties
-## tmp5 <- smes(as.numeric(twenties[,3]),method="rv",on = "days",timeindex = index(twenties),lambdas = 20*(1:20),nsds = 0.2*(1:10),stoplosses = -(1:5)*0.02,regulizationtype = "L-L2",slippage = 0.0025)
-
-## xxx <- aggregate(V1~V2+V3+V4,data = as.data.frame(tmp5$validation),FUN = sum,na.rm=TRUE)
-## xxx <- subset(xxx,V1>0)
-## xxx <- xxx[order(xxx$V1,decreasing = TRUE),]
-
-## which(with(as.data.frame(tmp5$validation),{V2==120&round(V3,1)==1.4&V4==-0.02}))
-
-
-## ## 240 2
-## IDX <- 1000*(0:39)+281
-## length(unlist(tmp5$trades[IDX]))/40
-## plot(unlist(tmp5$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp5$trades[IDX])),type = "l")
-
-## D <- unique(as.Date(index(twenties)))[-1]
-## pft <- subset(as.data.frame(tmp5$validation),V2==120&V3==0.2)
-## plot(xts(x=pft$V1,order.by = D))
-
-
-## IDX <- 200*(0:39)+33
-## length(unlist(tmp5$trades[IDX]))/40
-## plot(unlist(tmp5$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp5$trades[IDX])),type = "l")
-
-## D <- unique(as.Date(index(twenties)))[-1]
-## pft <- subset(as.data.frame(tmp5$validation),V2==80&V3==0.6)
-## plot(xts(x=pft$V1,order.by = D))
-
-## xxx2 <- ddply(as.data.frame(tmp5$validation),.(V2,V3),function(d){
-##     data.frame(V2=d$V2[1],V3=d$V3[1],sharpe=(mean(d$V1)-0.03/360)/sd(d$V1),pnl=sum(d$V1))
-## })
-## xxx2 <- xxx2[order(xxx2$sharpe,decreasing = TRUE),]
-
-## ## thirties
-## tmp6 <- smes(as.numeric(thirties[,3]),method="rv",on = "days",timeindex = index(thirties),lambdas = 20*(1:20),nsds = 0.2*(1:10),stoplosses = -(1:5)*0.02,regulizationtype = "L-L2",slippage = 0.005)
-
-## xxx <- aggregate(V1~V2+V3+V4,data = as.data.frame(tmp6$validation),FUN = sum,na.rm=TRUE)
-## xxx <- subset(xxx,V1>0)
-## xxx <- xxx[order(xxx$V1,decreasing = TRUE),]
-
-## xxx2 <- ddply(as.data.frame(tmp5$validation),.(V2,V3,V4),function(d){
-##     data.frame(V2=d$V2[1],V3=d$V3[1],V4=d$V4[1],sharpe=(mean(d$V1)-0.03/360)/sd(d$V1),pnl=sum(d$V1))
-## })
-## xxx2 <- xxx2[order(xxx2$sharpe,decreasing = TRUE),]
-
-
-## which(with(as.data.frame(tmp6$validation),{V2==60&round(V3,1)==0.6&V4==-0.08}))
-## which(with(as.data.frame(tmp6$validation),{V2==80&round(V3,1)==0.6&V4==-0.08}))
-## which(with(as.data.frame(tmp6$validation),{V2==80&round(V3,1)==0.6&V4==-0.08}))
-## which(with(as.data.frame(tmp6$validation),{V2==40&round(V3,1)==0.2&V4==-0.1}))
-## ## 160 0.2
-## IDX <- 1000*(0:39)+114
-## IDX <- 1000*(0:39)+164
-## IDX <- 1000*(0:39)+55
-## length(unlist(tmp6$trades[IDX]))/40
-## plot(unlist(tmp6$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp6$trades[IDX])),type = "l")
-
-## ## correlations
-## compare <- tmp6$validation[IDX,1]
-## xxx2 <- as.data.frame(tmp6$validation)
-## res <- NULL
-## for(i in 1:1000){
-##     x <- xxx2[i,]
-##     res <- c(res,cor(compare,subset(xxx2,V2==x$V2&V3==x$V3&V4==x$V4)$V1))
-## }
-## which(res<0)
-
-## pnl <- tmp6$validation[,1]-sapply(tmp6$trades,length)*7/10000
-## check <- as.data.frame(tmp6$validation)
-## check$V1 <- pnl
-## haha <- aggregate(V1~V2+V3,data = check,FUN = sum)
-
-
-
-
-## ## CU
-## ## fee: 0.5/10000
-## ## slippage:10
-## timeidx <- gsub("^.* ","",as.character(index(cuthirties)))
-## tmp7 <- smes(as.numeric(cuthirties[,1])[timeidx>="09:00:00"&timeidx<="15:00:00"],method="rv",on = "days",timeindex = index(cuthirties)[timeidx>="09:00:00"&timeidx<="15:00:00"],lambdas = 20*(1:20),nsds = 0.2*(1:10),stoplosses = -(1:5)*40,regulizationtype = "L-L2",slippage = 5)
-
-## xxx <- aggregate(V1~V2+V3+V4,data = as.data.frame(tmp7$validation),FUN = sum,na.rm=TRUE)
-## xxx <- subset(xxx,V1>0)
-## xxx <- xxx[order(xxx$V1,decreasing = TRUE),]
-
-## which(with(as.data.frame(tmp7$validation),{V2==200&round(V3,1)==1.2&V4==-200}))
-## which(with(as.data.frame(tmp7$validation),{V2==80&round(V3,1)==0.4&V4==-200}))
-## which(with(as.data.frame(tmp7$validation),{V2==100&round(V3,1)==0.4&V4==-200}))
-## ## 160 0.2
-## IDX <- 1000*(0:71)+480
-## IDX <- 1000*(0:71)+160
-## IDX <- 1000*(0:71)+210
-## length(unlist(tmp7$trades[IDX]))/74
-## plot(unlist(tmp7$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp7$trades[IDX])),type = "l")
-
-## tmp8 <- smes(as.numeric(cuthirties[,1])[timeidx>="21:00:00"|timeidx<="02:30:00"],method="rv",on = "days",timeindex = index(cuthirties)[timeidx>="21:00:00"|timeidx<="02:30:00"],lambdas = 20*(1:20),nsds = 0.2*(1:10),stoplosses = -(1:5)*40,regulizationtype = "L-L2",slippage = 5)
-
-## cumsum <- function(x,NA.zero=TRUE){
-##     if(NA.zero){
-##         x[is.na(x)] <- 0
+## ## series: numeric, price series
+## ## trades: integer, indicating trade indexes in price series
+## ## targetholdings: integer, target long or short holdings, length(targetholdings) must equal length(trades)
+## ## pertradedd: numeric, each trade's max allowable drawdown
+## ## cumdd: numeric, max allowable drawdown
+## riskmanager.instrument.backtest <- function(series,trades,targetholdings,pertradedd,cumdd,slippage){
+##     L <- length(series)
+##     if(length(trades)!=length(targetholdings)){stop("unequal number of trades")}
+##     ## 1. per trade, return pl of each trade
+##     eachtrade <- sapply(1:length(trades),function(i){
+##         pl <- (series[trades[i]:min(trades[i+1],L,na.rm=TRUE)]-series[trades[i]])*targetholdings[i]-slippage*abs(targetholdings[i])
+##         STOP <- which(drawdown(pl)<=pertradedd)[1]
+##         if(is.na(STOP)){
+##             return(tail(pl,1))
+##         }else{
+##             return(pl[STOP])
+##         }
+##     })
+##     ## 2. cumtrade
+##     ## STOP <- which(drawdown(eachtrade)<=cumdd)[1]
+##     STOP <- which(drawdown(cumsum(eachtrade))<=cumdd)[1]
+##     if(is.na(STOP)){
+##         return(eachtrade)
+##     }else{
+##         ## return(sum(eachtrade[1:STOP]))
+##         return(eachtrade[1:STOP])
 ##     }
-##     return(.Primitive("cumsum")(x))
 ## }
-## xxx <- aggregate(V1~V2+V3+V4,data = as.data.frame(tmp8$validation),FUN = sum,na.rm=TRUE)
-## xxx <- subset(xxx,V1>0)
-## xxx <- xxx[order(xxx$V1,decreasing = TRUE),]
 
-## which(with(as.data.frame(tmp8$validation),{V2==60&round(V3,1)==0.4&V4==-120}))
-## which(with(as.data.frame(tmp8$validation),{V2==100&round(V3,1)==0.4&V4==-80}))
-## IDX <- 1000*(0:71)+108
-## IDX <- 1000*(0:71)+207
-## length(unlist(tmp8$trades[IDX]))/71
-## plot(unlist(tmp8$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp8$trades[IDX])),type = "l")
+## riskmanager.portfolio.backtest <- function(){}
+## allocator.backtest <- function(){}
 
-
-## ## AU
-## ## 10 per hands(100g)
-## ## slippage: 0.05
-## tmp9 <- smes(as.numeric(authirties[,1])[timeidx>="09:00:00"&timeidx<="15:00:00"],method="rv",on = "days",timeindex = index(authirties)[timeidx>="09:00:00"&timeidx<="15:00:00"],lambdas = 20*(1:20),nsds = 0.2*(1:10),stoplosses = -(1:5)*0.4,regulizationtype = "L-L2",slippage = 0.12)
-
-## xxx <- aggregate(V1~V2+V3+V4,data = as.data.frame(tmp9$validation),FUN = sum,na.rm=TRUE)
-## xxx <- subset(xxx,V1>0)
-## xxx <- xxx[order(xxx$V1,decreasing = TRUE),
-## ]
-## which(with(as.data.frame(tmp9$validation),{V2==400&round(V3,1)==0.6&V4==-1.6}))
-
-## IDX <- 1000*(0:71)+964
-## length(unlist(tmp9$trades[IDX]))/71
-## plot(unlist(tmp9$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp9$trades[IDX])),type = "l")
-
-
-## tmp10 <- smes(as.numeric(authirties[,1])[timeidx>="21:00:00"|timeidx<="02:30:00"],method="rv",on = "days",timeindex = index(authirties)[timeidx>="21:00:00"|timeidx<="02:30:00"],lambdas = 20*(1:20),nsds = 0.2*(1:10),stoplosses = -(1:5)*0.4,regulizationtype = "L-L2",slippage = 0.12)
-
-## xxx <- aggregate(V1~V2+V3+V4,data = as.data.frame(tmp10$validation),FUN = sum,na.rm=TRUE)
-## xxx <- subset(xxx,V1>0)
-## xxx <- xxx[order(xxx$V1,decreasing = TRUE),]
-
-## which(with(as.data.frame(tmp10$validation),{V2==40&round(V3,1)==0.8&V4==-0.8}))
-
-## IDX <- 1000*(0:68)+67
-## length(unlist(tmp10$trades[IDX]))/71
-## plot(unlist(tmp10$trades[IDX]),type = "l")
-## plot(cumsum(unlist(tmp10$trades[IDX])),type = "l"
-## )
