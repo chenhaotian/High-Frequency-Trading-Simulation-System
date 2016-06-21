@@ -1,3 +1,145 @@
+tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE
+
+options(digits.secs=DIGITSSECS)
+options(stringsAsFactors = STRINGSASFACTORS)
+
+
+.tradingstates <- new.env(hash = TRUE)
+.tradingstates$orders <- data.frame(
+    instrumentid=character(),
+    orderid=character(),direction=numeric(),
+    price=numeric(),hands=numeric(),
+    action=character(),
+    initialhands=numeric(),
+    timeoutlist=logical(),          #wether to check timeout
+    timeoutchase=logical(),         #wether to chase after timeout
+    timeoutsleep=numeric(),          #length of timeout,in secs
+    chaselist=logical(),            #wether to chase
+    chasesleep=numeric(),           #length of chase sleep time,secs
+    submitstart=character(),        #chase or timeout start time
+    stringsAsFactors=FALSE)
+.tradingstates$limitprior <- NULL    #high prior limit orders
+.tradingstates$capital <- data.frame(
+    instrumentid=character(),
+    longholdingstoday=numeric(), shortholdingstoday=numeric(),
+    longholdingspreday=numeric(),shortholdingspreday=numeric(),
+    totallongholdings=numeric(),totalshortholdings=numeric(),
+    cash=numeric(),stringsAsFactors=FALSE
+)
+.tradingstates$tc <- tc              #trade center?
+## target holding of trade center
+.tradingstates$th <- data.frame(instrumentid=character(),longholding=numeric(),
+                               shortholding=numeric(),stringsAsFactors = FALSE)
+
+## write history to memory
+.tradingstates$orderhistory <- data.frame(
+    instrumentid=character(),orderid=character(),
+    direction=numeric(),price=numeric(),
+    hands=numeric(),action=character(),
+    tradetime=character(),tradeprice=numeric(),
+    cost=numeric(),status=numeric(),
+    initialhands=numeric(),
+    stringsAsFactors = FALSE)
+.tradingstates$capitalhistory <- data.frame(
+    instrumentid=character(),
+    longholdingstoday=numeric(), shortholdingstoday=numeric(),
+    longholdingspreday=numeric(),shortholdingspreday=numeric(),
+    totallongholdings=numeric(),totalshortholdings=numeric(),
+    cash=numeric(),tradetime=character(),
+    tradeprice=numeric(),tradehands=numeric(),cost=numeric(),
+    stringsAsFactors=FALSE)
+
+## save seprated traded order history when septraded=TRUE
+.tradingstates$septraded <- septraded
+.tradingstates$longopen <- data.frame(
+    instrumentid=character(),orderid=character(),
+    action=character(),
+    direction=numeric(),
+    tradehands=numeric(),
+    tradeprice=numeric(),
+    stringsAsFactors = FALSE)
+.tradingstates$shortclose <- .tradingstates$longopen
+.tradingstates$shortopen <- .tradingstates$longopen
+.tradingstates$shortclose <- .tradingstates$longopen
+
+## current time
+.tradingstates$currenttradetime <- character()
+
+## interdaily or not
+.tradingstates$interdaily <- interdaily
+.tradingstates$startoftheday <- logical()
+
+## verbose
+.tradingstates$verbosepriors <- NULL
+
+## trade center invoke tag and sleep recorder
+.tradingstates$justchanged <- NULL
+.tradingstates$lastchange <- NULL
+.tradingstates$Sleep <- Sleep
+
+## instrument-closeprofit tracker
+.tradingstates$closed <- closed
+.tradingstates$closedtracker <- data.frame(instrumentid=character(),cash=numeric(),stringsAsFactors=FALSE)
+
+## track unclosed orders
+.tradingstates$unclosed <- unclosed
+.tradingstates$unclosedlong <- .tradingstates$longopen
+.tradingstates$unclosedshort <- .tradingstates$longopen
+.tradingstates$unclosedsettleprice <- logical()
+
+
+.INSTRUMENT  <- new.env(hash = TRUE)
+
+.INSTRUMENT$instrumentid <- list()
+
+
+.INSTRUMENT$pbuyhands <- list()
+.INSTRUMENT$pbuyprice <- list()
+.INSTRUMENT$psellhands <- list()
+.INSTRUMENT$psellprice <- list()
+.INSTRUMENT$ptradetime <- list()
+.INSTRUMENT$plastprice <- list()
+.INSTRUMENT$pvolume <- list()
+.INSTRUMENT$ppresettleprice <- list()
+
+.INSTRUMENT$pbuyhands <- list()
+.INSTRUMENT$pbuyprice <- list()
+## sellbook:
+.INSTRUMENT$psellhands <- list()
+.INSTRUMENT$psellprice <- list()
+
+.INSTRUMENT$ptradetime <- list()
+.INSTRUMENT$plastprice <- list()
+.INSTRUMENT$pvolume <- list()
+.INSTRUMENT$ppresettleprice <- list()
+
+
+## temp variables and user specified parameters
+.INSTRUMENT$pretotalvolume <- list()
+.INSTRUMENT$orderbook <- list()
+.INSTRUMENT$preorderbook <- list()
+.INSTRUMENT$lastprice <- list()    #holdings profit
+
+.INSTRUMENT$fee <- list()
+.INSTRUMENT$closeprior <- list()
+.INSTRUMENT$fee <- list()
+.INSTRUMENT$closeprior <- list()
+
+## time format
+.INSTRUMENT$timeformat <- list()
+
+## end of the day
+.INSTRUMENT$endoftheday <- list()
+.INSTRUMENT$tomidnight <- list()
+
+## face value per hand
+.INSTRUMENT$multiplier <- list()
+
+## parameters for interdaily trading
+.INSTRUMENT$pre <- list()
+.INSTRUMENT$current <- list()
+
+
 ##' queryorder
 ##'
 ##' queryorder
@@ -8,9 +150,9 @@
 ##'
 queryorder <- function(orderids=NULL){
     if(is.null(orderids))
-        return(.GlobalEnv$tradingstates$orders)
+        return(.tradingstates$orders)
     else
-        return(.GlobalEnv$tradingstates$orders[.GlobalEnv$tradingstates$orders$orderid%in%orderids,])
+        return(.tradingstates$orders[.tradingstates$orders$orderid%in%orderids,])
 }
 
 ##' querycapital
@@ -24,27 +166,32 @@ queryorder <- function(orderids=NULL){
 ##'
 querycapital <- function(instrumentids=NULL){
     if(!is.null(instrumentids))
-        return(subset(.GlobalEnv$tradingstates$capital,instrumentid%in%instrumentids))
+        return(subset(.tradingstates$capital,instrumentid%in%instrumentids))
     else
-        return(.GlobalEnv$tradingstates$capital)
+        return(.tradingstates$capital)
 }
 
-##' ordersubmission
-##' 
-##'  different kinds of order actions, including open, close, closetoday, closepreday and cancel.
-##'
+##' @title ordersubmission
+##'  take one of the following order actions, including open, close, closetoday, closepreday and cancel.
+##' @details ordersubmission submit an order specified by the user, it also take some additional actions after the submission. For example, if set timeoutlist=TRUE and timeoutsleep=1, the simulator will first submit an order and cancel it if it hasn't been executed in the next second.
 ##' @seealso \link{multisubmission} \link{timeoutchasesubmission} \link{timeoutsubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier
 ##' @param orderid character, specifying an unique order id, can be generated by randomid()
 ##' @param direction integer, specifying trading direction. 1 for long, -1 for short.
-##' @param price numeric, specifiying order pirce.NOTE: when price=0, ordersubmission() will submit a market order; when price=NULL, ordersubmission() will take the corresponding bid1 or ask1 price as order price.
+##' @param price numeric, specifiying order pirce.NOTE: when price=0, ordersubmission() will submit a market order; when price=NULL, ordersubmission() will take the corresponding bid1 or ask1 price as submitted price.
 ##' @param hands integer, specifying amount to be submitted.
 ##' @param action character, specifying submit action, action can take value from one of "open","close","closetoday","closepreday" and "cancel". amout submitted in action='close' can not be greater than the sum of current holdings and queuing open hands.
+##' @param timeoutlist logical, specyfing wether to give current order a timeout interval, the length of the interval is specified by timeoutsleep. if the order hasn't been executed after a time interval greater than timeoutsleep, the order will be canceled.
+##' @param timeoutsleep numeric, specifying the timeout length in seconds.
+##' @param chaselist logical, specifying wether to put this order to auto-chase list. if the order hasn' been executed for a time inverval longer than chasesleep, the simulator will cancel this order(if needed), then submit a new one with the sampe hands and a price equal to the bid1/ask1 price. the simulator will repeat this action until the original submitted amount is executed.
+##' @param chasesleep numeric, specifying the time interval between each execution check. In seconds.
+##' @param 
 ##' @return order status
 ##' @export
-##' @author Chen Haotian
 ##'
-ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price=0,hands=1,action="open",timeoutlist=FALSE,timeoutchase=FALSE,timeoutsleep=1,chaselist=FALSE,chasesleep=1,tradetime=.GlobalEnv$tradingstates$currenttradetime){
+ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price=0,hands=1,action="open",timeoutlist=FALSE,timeoutchase=FALSE,timeoutsleep=1,chaselist=FALSE,chasesleep=1){
+
+    tradetime=.tradingstates$currenttradetime
     
     match.arg(action,choices = c("open","close","closetoday","closepreday","cancel"))
     if(is.null(orderid) | is.null(instrumentid)){
@@ -53,8 +200,8 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
 
     ## cancel order
     if(action=="cancel"){
-        canceledorder <- .GlobalEnv$tradingstates$orders[.GlobalEnv$tradingstates$orders$orderid==orderid,]
-        .GlobalEnv$tradingstates$orders <- .GlobalEnv$tradingstates$orders[.GlobalEnv$tradingstates$orders$orderid!=orderid,]
+        canceledorder <- .tradingstates$orders[.tradingstates$orders$orderid==orderid,]
+        .tradingstates$orders <- .tradingstates$orders[.tradingstates$orders$orderid!=orderid,]
         .writeorderhistory(instrumentid,orderid,canceledorder$direction,canceledorder$hands,canceledorder$price,tradeprice=0,status=5,action,cost=0)
         return(5)
     }
@@ -65,14 +212,14 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
 
     ## special requirements when action!=cancel
     ## get most recent orderbook
-    mostrecentorderbook <- INSTRUMENT$orderbook[[instrumentid]]
+    mostrecentorderbook <- .INSTRUMENT$orderbook[[instrumentid]]
     ## submist bid1 or ask1 when price=NULL
     if(is.null(price)){
         price <- ifelse(direction==1,mostrecentorderbook$buybook$price[1],mostrecentorderbook$sellbook$price[1])
     }
     
     ## tmp file, used to update order state
-    orders <- .GlobalEnv$tradingstates$orders
+    orders <- .tradingstates$orders
     currentinstrument <- orders[orders$instrumentid==instrumentid,]
     if(orderid%in%currentinstrument$orderid){
         stop("orderid already exists!")
@@ -88,7 +235,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         if(price>0){
             .priororders(mostrecentorderbook = mostrecentorderbook,orderid = orderid,direction = direction,price=price)
         }
-        .GlobalEnv$tradingstates$orders <- orders
+        .tradingstates$orders <- orders
         .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=3,action,cost=0)
         return(3)
     }
@@ -102,7 +249,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         if(price>0)
             .priororders(mostrecentorderbook = mostrecentorderbook,orderid = orderid,direction = direction,price=price)
 
-        .GlobalEnv$tradingstates$orders <- orders
+        .tradingstates$orders <- orders
         .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=3,action,cost=0)
         return(3)
     }
@@ -115,7 +262,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         if(price>0)
             .priororders(mostrecentorderbook = mostrecentorderbook,orderid = orderid,direction = direction,price=price)
 
-        .GlobalEnv$tradingstates$orders <- orders
+        .tradingstates$orders <- orders
         .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=3,action,cost=0)
         return(3)
     }
@@ -129,7 +276,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         if(price>0)
             .priororders(mostrecentorderbook = mostrecentorderbook,orderid = orderid,direction = direction,price=price)
 
-        .GlobalEnv$tradingstates$orders <- orders
+        .tradingstates$orders <- orders
         .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=3,action,cost=0)
         return(3)
     }
@@ -317,21 +464,21 @@ timeoutchasesubmission <- function(instrumentid="qtid",orderid=NULL,direction=1,
 meanopen <- function(instrumentid=character(),side="long"){
     match.arg(side,c("long","short"))
     if(side=="long"){
-        IDX <- .GlobalEnv$tradingstates$unclosedlong$instrumentid==instrumentid
-        if(nrow(.GlobalEnv$tradingstates$unclosedlong[IDX,])==0){
+        IDX <- .tradingstates$unclosedlong$instrumentid==instrumentid
+        if(nrow(.tradingstates$unclosedlong[IDX,])==0){
             return(NULL)
         }
         else{
-            return(sum(.GlobalEnv$tradingstates$unclosedlong$tradeprice[IDX]*.GlobalEnv$tradingstates$unclosedlong$tradehands[IDX])/sum(.GlobalEnv$tradingstates$unclosedlong$tradehands[IDX]))
+            return(sum(.tradingstates$unclosedlong$tradeprice[IDX]*.tradingstates$unclosedlong$tradehands[IDX])/sum(.tradingstates$unclosedlong$tradehands[IDX]))
         }
     }
     else{
-        IDX <- .GlobalEnv$tradingstates$unclosedshort$instrumentid==instrumentid
-        if(nrow(.GlobalEnv$tradingstates$unclosedshort[IDX,])==0){
+        IDX <- .tradingstates$unclosedshort$instrumentid==instrumentid
+        if(nrow(.tradingstates$unclosedshort[IDX,])==0){
             return(NULL)
         }
         else{
-            return(sum(.GlobalEnv$tradingstates$unclosedshort$tradeprice[IDX]*.GlobalEnv$tradingstates$unclosedshort$tradehands[IDX])/sum(.GlobalEnv$tradingstates$unclosedshort$tradehands[IDX]))
+            return(sum(.tradingstates$unclosedshort$tradeprice[IDX]*.tradingstates$unclosedshort$tradehands[IDX])/sum(.tradingstates$unclosedshort$tradehands[IDX]))
         }
     }
 }
@@ -356,10 +503,10 @@ meanopen <- function(instrumentid=character(),side="long"){
 holdingsprofit <- function(instrumentid=character(),side="long"){
     MEANOPEN <- meanopen(instrumentid,side)
     if(is.null(MEANOPEN)){return(0)}
-    lastprice <- INSTRUMENT$lastprice[[instrumentid]]
-    multiplier <- INSTRUMENT$multiplier[[instrumentid]]
+    lastprice <- .INSTRUMENT$lastprice[[instrumentid]]
+    multiplier <- .INSTRUMENT$multiplier[[instrumentid]]
     ## get holdings
-    HOLDINGS <- ifelse(side=="long",.GlobalEnv$tradingstates$capital$totallongholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid],.GlobalEnv$tradingstates$capital$totalshortholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid])
+    HOLDINGS <- ifelse(side=="long",.tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid],.tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid])
 
     return(HOLDINGS*(lastprice-MEANOPEN)*multiplier)
 }
@@ -381,140 +528,8 @@ holdingsprofit <- function(instrumentid=character(),side="long"){
 ##' @author Chen
 ##' 
 closedprofit <- function(instrumentid){
-    return(.GlobalEnv$tradingstates$closedtracker$cash[.GlobalEnv$tradingstates$closedtracker$instrumentid==instrumentid])
+    return(.tradingstates$closedtracker$cash[.tradingstates$closedtracker$instrumentid==instrumentid])
 }
-
-##' initializestates
-##' 
-##'  initialize simulator states, including simulation back ground functionality and many ohter simulator related parameters. return an environment named 'tradingstates'. queuing orders and capital state will be saved and kept updated in tradingstates, see 'Details' for more information. *please read this documentation carefully before running any strategy!*
-##' 
-##' @param tc logical, indicating wehter to use a simulated tradecenter. when tc=TRUE, submitmethod will be coerced to 'lazysubmission'(type ?lazysubmission for details). see 'Details' for more about tradecenter
-##' @param Sleep numeric, idle time length of simulated tradecenter, measured in seconds, default 1. see 'Details' for more information.
-##' @param IMLAZY logical, pleas set it to TRUE if you are lazy. type ?initializeinstrument for more infromation.
-##' @param DIGITSSECS integer, second digits, default 3
-##' @param septraded logical, indicating wether to record traded orders separately.
-##' @param unclosed logical, indicating wether to track all unclosed orders, set unclosed=TRUE when you need to calculate mean open price and open profit. type ?meanopen for more infromation.
-##' @param closed logical, indicating wether to track all zero holding states, set closed=TRUE when you need to calculate close profit.
-##' @param interdaily logical, indicating wether to support interdaily trading.
-##' @return tradingstates env, an environment in .GlobelEnv containing all the parameters specified above.
-##' @details tradingstates: an environment containing all the simulators' parameters, there are two improtant dataframes stored in this envrionment, 'orders' and 'capital'. All current queuing orders will be recorded as one row in 'orders' during simulation. if there haven't submitted any orders or all the orders are traded(i.e. no queuing orders), 'orders' will be a data.frame with 0 rows. each instrument's capital state will be stored as one row in 'capital'. 'capital' has at least one row. one can use queryorder() and qureycapital() inside their strategy to fetch 'orders' and 'capital' from tradingstates.
-##'
-##' orderhistory: every changed order will be recorded as one additional row in orderhistory after every updating(submit new order, cancel order, partial traded, all traded ...) of orders, saved as either a comma separated table in Redis or a local file. columns of the table are: instrumentid,orderid,direction,price, hands,action,trade time,trade price,cost and status. 'cost' represent the commission of current update, it's calculated from parameter `fee` specified in initializeinstrument(), type ?initializeinstrument for more details; 'status' represent current order's status: 0, all traded; 1, part traded, rest queuing; 2, part traded, rest canceled; 3, no trade, queuing; 4, no trade, no queuing; 5, canceled; 6, submission failed;
-##'
-##' capitalhistory: the newest capital state will be recorded as one additional row in capitalhistory after each change, saved the same way as orderhistory. the columns are: instrumentid,today's long holdings, today's short holdings, previous long holdings, previous short holdings, total long holdings, total short holdings, cash, update time, trade price, traded hands and cost.
-##'
-##' tradecenter: a simulated trade center. automatically check for unsatisfied orders and repalce them with new ones to achieve target holdings(target holdings are set by lazysubmission).  'Sleep' set the idle time between each checking, default 0.
-##' @seealso \link{initializeinstrument} \link{lazysubmission} \link{meanopen}
-##' @export
-##' @examples
-##'\dontrun{
-##' ## wirte capital and order histories to local file, don't sychronize target holdings, don't use simulated trade center and tell the simulator 'I'm not lazy'.
-##' initializestates(realtime=FALSE,writeholding=FALSE,tc=FALSE,IMLAZY = FALSE)
-##' }
-##' @author Chen
-##' 
-initializestates <- function(tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
-    
-
-    ## second digits, default 3
-    options(digits.secs=DIGITSSECS)
-    options(stringsAsFactors = STRINGSASFACTORS)
-    
-    tradingstates <- new.env(parent = globalenv())
-    tradingstates$orders <- data.frame(
-        instrumentid=character(),
-        orderid=character(),direction=numeric(),
-        price=numeric(),hands=numeric(),
-        action=character(),
-        initialhands=numeric(),
-        timeoutlist=logical(),          #wether to check timeout
-        timeoutchase=logical(),         #wether to chase after timeout
-        timeoutsleep=numeric(),          #length of timeout,in secs
-        chaselist=logical(),            #wether to chase
-        chasesleep=numeric(),           #length of chase sleep time,secs
-        submitstart=character(),        #chase or timeout start time
-        stringsAsFactors=FALSE)
-    tradingstates$limitprior <- NULL    #high prior limit orders
-    tradingstates$capital <- data.frame(
-        instrumentid=character(),
-        longholdingstoday=numeric(), shortholdingstoday=numeric(),
-        longholdingspreday=numeric(),shortholdingspreday=numeric(),
-        totallongholdings=numeric(),totalshortholdings=numeric(),
-        cash=numeric(),stringsAsFactors=FALSE
-        )
-    tradingstates$tc <- tc              #trade center?
-    ## target holding of trade center
-    tradingstates$th <- data.frame(instrumentid=character(),longholding=numeric(),
-                                   shortholding=numeric(),stringsAsFactors = FALSE)
-
-    ## write history to memory
-    tradingstates$orderhistory <- data.frame(
-        instrumentid=character(),orderid=character(),
-        direction=numeric(),price=numeric(),
-        hands=numeric(),action=character(),
-        tradetime=character(),tradeprice=numeric(),
-        cost=numeric(),status=numeric(),
-        initialhands=numeric(),
-        stringsAsFactors = FALSE)
-    tradingstates$capitalhistory <- data.frame(
-        instrumentid=character(),
-        longholdingstoday=numeric(), shortholdingstoday=numeric(),
-        longholdingspreday=numeric(),shortholdingspreday=numeric(),
-        totallongholdings=numeric(),totalshortholdings=numeric(),
-        cash=numeric(),tradetime=character(),
-        tradeprice=numeric(),tradehands=numeric(),cost=numeric(),
-        stringsAsFactors=FALSE)
-
-    ## save seprated traded order history when septraded=TRUE
-    tradingstates$septraded <- septraded
-    tradingstates$longopen <- data.frame(
-        instrumentid=character(),orderid=character(),
-        action=character(),
-        direction=numeric(),
-        tradehands=numeric(),
-        tradeprice=numeric(),
-        stringsAsFactors = FALSE)
-    tradingstates$shortclose <- tradingstates$longopen
-    tradingstates$shortopen <- tradingstates$longopen
-    tradingstates$shortclose <- tradingstates$longopen
-
-    ## current time
-    tradingstates$currenttradetime <- character()
-
-    ## interdaily or not
-    tradingstates$interdaily <- interdaily
-    tradingstates$startoftheday <- logical()
-
-    ## verbose
-    tradingstates$verbosepriors <- NULL
-    
-    ## trade center invoke tag and sleep recorder
-    tradingstates$justchanged <- NULL
-    tradingstates$lastchange <- NULL
-    tradingstates$Sleep <- Sleep
-    
-    ## instrument-closeprofit tracker
-    tradingstates$closed <- closed
-    tradingstates$closedtracker <- data.frame(instrumentid=character(),cash=numeric(),stringsAsFactors=FALSE)
-
-    ## track unclosed orders
-    tradingstates$unclosed <- unclosed
-    tradingstates$unclosedlong <- tradingstates$longopen
-    tradingstates$unclosedshort <- tradingstates$longopen
-    tradingstates$unclosedsettleprice <- logical()
-
-    
-    ## I'm lazy?
-    tradingstates$IMLAZY <- IMLAZY
-    if(IMLAZY){
-        .lazyfunctions()
-    }
-    
-    ## tradingstates will be deleted after exit
-    ## assign it to an object in globalenv to aviod deletion
-    assign("tradingstates",tradingstates,envir = globalenv())
-}
-
 
 ##' initializeinstrument
 ##'
@@ -602,114 +617,51 @@ initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,pse
     CASH <- 0
     
     ## initialize instrument
-    if(exists("INSTRUMENT",envir=globalenv())){
-
-        INSTRUMENT$instrumentid[[instrumentid]] <- instrumentid
-        
-        INSTRUMENT$pbuyhands[[instrumentid]] <- pbuyhands
-        INSTRUMENT$pbuyprice[[instrumentid]] <- pbuyprice
-        ## sellbook:
-        INSTRUMENT$psellhands[[instrumentid]] <- psellhands
-        INSTRUMENT$psellprice[[instrumentid]] <- psellprice
-        
-        INSTRUMENT$ptradetime[[instrumentid]] <- ptradetime
-        INSTRUMENT$plastprice[[instrumentid]] <- plastprice
-        INSTRUMENT$pvolume[[instrumentid]] <- pvolume
-        INSTRUMENT$ppresettleprice[[instrumentid]] <- ppresettleprice
-
-        INSTRUMENT$fee[[instrumentid]] <- fee
-        INSTRUMENT$closeprior[[instrumentid]] <- closeprior
-
-        INSTRUMENT$timeformat[[instrumentid]] <- timeformat
-
-        INSTRUMENT$endoftheday[[instrumentid]] <- paste("1970-01-01",endoftheday)
-        INSTRUMENT$tomidnight[[instrumentid]] <- difftime("1970-01-02 00:00:00.000",INSTRUMENT$endoftheday[[instrumentid]],units = "secs")
-
-        INSTRUMENT$multiplier[[instrumentid]] <- multiplier
-
-        INSTRUMENT$pre[[instrumentid]] <- 0
-        INSTRUMENT$current[[instrumentid]] <- 0
-    }
-    else{
-        INSTRUMENT  <- new.env(parent=globalenv())
-
-        INSTRUMENT$instrumentid <- list()
-        INSTRUMENT$instrumentid[[instrumentid]] <- instrumentid
-        
-        INSTRUMENT$pbuyhands <- list()
-        INSTRUMENT$pbuyprice <- list()
-        INSTRUMENT$psellhands <- list()
-        INSTRUMENT$psellprice <- list()
-        INSTRUMENT$ptradetime <- list()
-        INSTRUMENT$plastprice <- list()
-        INSTRUMENT$pvolume <- list()
-        INSTRUMENT$ppresettleprice <- list()
-
-        INSTRUMENT$pbuyhands[[instrumentid]] <- pbuyhands
-        INSTRUMENT$pbuyprice[[instrumentid]] <- pbuyprice
-        ## sellbook:
-        INSTRUMENT$psellhands[[instrumentid]] <- psellhands
-        INSTRUMENT$psellprice[[instrumentid]] <- psellprice
-        
-        INSTRUMENT$ptradetime[[instrumentid]] <- ptradetime
-        INSTRUMENT$plastprice[[instrumentid]] <- plastprice
-        INSTRUMENT$pvolume[[instrumentid]] <- pvolume
-        INSTRUMENT$ppresettleprice[[instrumentid]] <- ppresettleprice
-
-        
-        ## temp variables and user specified parameters
-        INSTRUMENT$pretotalvolume <- list()
-        INSTRUMENT$orderbook <- list()
-        INSTRUMENT$preorderbook <- list()
-        INSTRUMENT$lastprice <- list()    #holdings profit
-
-        INSTRUMENT$fee <- list()
-        INSTRUMENT$closeprior <- list()
-        INSTRUMENT$fee[[instrumentid]] <- fee
-        INSTRUMENT$closeprior[[instrumentid]] <- closeprior
-        
-        ## time format
-        INSTRUMENT$timeformat <- list()
-        INSTRUMENT$timeformat[[instrumentid]] <- timeformat
-        
-        ## end of the day
-        INSTRUMENT$endoftheday <- list()
-        INSTRUMENT$tomidnight <- list()
-        INSTRUMENT$endoftheday[[instrumentid]] <- paste("1970-01-01",endoftheday)
-        INSTRUMENT$tomidnight[[instrumentid]] <- difftime("1970-01-02 00:00:00.000",INSTRUMENT$endoftheday[[instrumentid]],units = "secs")
-        
-        ## face value per hand
-        INSTRUMENT$multiplier <- list()
-        INSTRUMENT$multiplier[[instrumentid]] <- multiplier
-        
-        ## parameters for interdaily trading
-        INSTRUMENT$pre <- list()
-        INSTRUMENT$current <- list()
-
-        INSTRUMENT$pre[[instrumentid]] <- 0
-        INSTRUMENT$current[[instrumentid]] <- 0
-        
-        assign("INSTRUMENT",value = INSTRUMENT,envir = globalenv())
-    }
-
+    
+    .INSTRUMENT$instrumentid[[instrumentid]] <- instrumentid
+    
+    .INSTRUMENT$pbuyhands[[instrumentid]] <- pbuyhands
+    .INSTRUMENT$pbuyprice[[instrumentid]] <- pbuyprice
+    ## sellbook:
+    .INSTRUMENT$psellhands[[instrumentid]] <- psellhands
+    .INSTRUMENT$psellprice[[instrumentid]] <- psellprice
+    
+    .INSTRUMENT$ptradetime[[instrumentid]] <- ptradetime
+    .INSTRUMENT$plastprice[[instrumentid]] <- plastprice
+    .INSTRUMENT$pvolume[[instrumentid]] <- pvolume
+    .INSTRUMENT$ppresettleprice[[instrumentid]] <- ppresettleprice
+    
+    .INSTRUMENT$fee[[instrumentid]] <- fee
+    .INSTRUMENT$closeprior[[instrumentid]] <- closeprior
+    
+    .INSTRUMENT$timeformat[[instrumentid]] <- timeformat
+    
+    .INSTRUMENT$endoftheday[[instrumentid]] <- paste("1970-01-01",endoftheday)
+    .INSTRUMENT$tomidnight[[instrumentid]] <- difftime("1970-01-02 00:00:00.000",.INSTRUMENT$endoftheday[[instrumentid]],units = "secs")
+    
+    .INSTRUMENT$multiplier[[instrumentid]] <- multiplier
+    
+    .INSTRUMENT$pre[[instrumentid]] <- 0
+    .INSTRUMENT$current[[instrumentid]] <- 0
+    
     ## new day tracker
-    .GlobalEnv$tradingstates$startoftheday[instrumentid] <- FALSE
-
+    .tradingstates$startoftheday[instrumentid] <- FALSE
+    
     ## add zero holding tracker
-    .GlobalEnv$tradingstates$closedtracker <- unique(rbind(
-        .GlobalEnv$tradingstates$closedtracker,
+    .tradingstates$closedtracker <- unique(rbind(
+        .tradingstates$closedtracker,
         data.frame(instrumentid=instrumentid,cash=CASH,stringsAsFactors=FALSE)
     ))
-
+    
     
     ## initialize trade center
-    .GlobalEnv$tradingstates$justchanged[instrumentid] <- FALSE
-    .GlobalEnv$tradingstates$lastchange[instrumentid] <- "1970-01-01 00:00:01.300"
+    .tradingstates$justchanged[instrumentid] <- FALSE
+    .tradingstates$lastchange[instrumentid] <- "1970-01-01 00:00:01.300"
     
     ## initialize instrument capital
-    if(nrow(.GlobalEnv$tradingstates$capital[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid,])==0){
-        .GlobalEnv$tradingstates$capital <- rbind(
-            .GlobalEnv$tradingstates$capital,
+    if(nrow(.tradingstates$capital[.tradingstates$capital$instrumentid==instrumentid,])==0){
+        .tradingstates$capital <- rbind(
+            .tradingstates$capital,
             data.frame(
                 instrumentid=instrumentid,
                 longholdingstoday=0, shortholdingstoday=0,
@@ -720,34 +672,32 @@ initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,pse
             )
     }
     else{
-        .GlobalEnv$tradingstates$capital$longholdingstoday[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
-        .GlobalEnv$tradingstates$capital$shortholdingstoday[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
-        .GlobalEnv$tradingstates$capital$longholdingspreday[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
-        .GlobalEnv$tradingstates$capital$shortholdingspreday[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
-        .GlobalEnv$tradingstates$capital$totallongholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
-        .GlobalEnv$tradingstates$capital$totalshortholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- 0
-        .GlobalEnv$tradingstates$capital$cash[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid] <- CASH
+        .tradingstates$capital$longholdingstoday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$shortholdingstoday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$longholdingspreday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$shortholdingspreday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$cash[.tradingstates$capital$instrumentid==instrumentid] <- CASH
     }
     
     ## initialize target holding(after read holding) for trade center
-    .GlobalEnv$tradingstates$th <- rbind(.GlobalEnv$tradingstates$th,
-                                         data.frame(instrumentid=instrumentid,
-                                                    longholding=.GlobalEnv$tradingstates$capital$totallongholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid],
-                                                    shortholding=.GlobalEnv$tradingstates$capital$totalshortholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid],
-                                                    stringsAsFactors = FALSE))
-
-    .GlobalEnv$tradingstates$th <- unique(.GlobalEnv$tradingstates$th)
-
-    if(nrow(.GlobalEnv$tradingstates$th)==0){
+    .tradingstates$th <- rbind(.tradingstates$th,
+                               data.frame(instrumentid=instrumentid,
+                                          longholding=.tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid],
+                                          shortholding=.tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid],
+                                          stringsAsFactors = FALSE))
+    .tradingstates$th <- unique(.tradingstates$th)
+    if(nrow(.tradingstates$th)==0){
         stop("error while generating target holdings")
     }
     
     ## I'm lazy?
-    if(.GlobalEnv$tradingstates$IMLAZY){
+    if(.tradingstates$IMLAZY){
         .lazyexpressions(instrumentid=instrumentid,type = "specific")
         .lazyexpressions(instrumentid=instrumentid,
-                        ninstruments = length(INSTRUMENT$instrumentid),
-                        type = "general")
+                         ninstruments = length(.INSTRUMENT$instrumentid),
+                         type = "general")
     }
     
 }
@@ -763,7 +713,6 @@ initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,pse
 ##'
 randomid <- function(n){paste(letters[ceiling(runif(n,0,26))],collapse = "")}
 
-
 ##' is new day?
 ##'
 ##' is new day?
@@ -774,84 +723,9 @@ randomid <- function(n){paste(letters[ceiling(runif(n,0,26))],collapse = "")}
 ##' @author Chen
 ##'
 is.newday <- function(instrumentid){
-    return(.GlobalEnv$tradingstates$startoftheday[instrumentid])
+    return(.tradingstates$startoftheday[instrumentid])
 }
 
-
-##' initializeTF
-##'
-##'   a simple wrapper of initializestates() and initializeinstrument() for Treasury Futures. type ?initializestates and ?initializeinstrument for details.
-##'
-##' @param realtimeDATA logical, indicating wether to use realtime data.
-##' @param TFs character, specifying TF ids to be initialized.
-##' @param fee named numeric, specifying conmissions of different actions, including open, close, closetoday and closepreday. 'cost' in orderhistory and capitalhistory are result calculated by 'fee'.
-##' @param closeprior character, specifying close priority when specified action='close' in ordersubmission. closeprior can only be one of 'today' and 'preday'. when closeprior='today', ordersubmission will close today's holdings prior than previous days', vise versa. type ?ordersubmission for details.
-##' @param tc logical, indicating wehter to use a simulated tradecenter. when tc=TRUE, submitmethod will be coerced to 'lazysubmission'(type ?lazysubmission for details). see 'Details' for more about tradecenter
-##' @param Sleep numeric, idle time length of simulated tradecenter, measured in seconds, default 1. see 'Details' for more information.
-##' @param IMLAZY logical, pleas set it to TRUE if you are lazy. type ?initializeinstrument for more infromation.
-##' @param DIGITSSECS integer, second digits, default 3
-##' @param septraded logical, indicating wether to save traded orders separately.
-##' @param unclosed logical, indicating wether to track all unclosed orders, set unclosed=TRUE when you need to calculate mean open price and open profit. type ?meanopen for more infromation.
-##' @param closed logical, indicating wether to track all zero holding states, set closed=TRUE when you need to calculate close profit.
-##' @param interdaily logical, indicating wether to support interdaily trading.
-##' @return nothing
-##' @seealso  \link{initializestates} \link{initializeinstrument}
-##' @export 
-##' @author Chen
-##'
-initializeTF <- function(realtimeDATA=TRUE,TFs="TF1512",fee=c(long=0.00000225,short=0.00000225,closetoday=0.00000225,closepreday=0.00000225),closeprior="today",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
-
-    if(missing(realtimeDATA)){
-        stop("realtimeDATA must be specified!")
-    }
-    
-    ## initialize states
-    initializestates(tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
-    
-    ## initialize instruments
-    if(realtimeDATA){
-        for(tf in TFs){
-            initializeinstrument(tf,
-                                 pbuyhands = seq(from = 19,by = 2,length.out = 5),
-                                 pbuyprice = seq(from = 20,by = 2,length.out = 5),
-                                 psellhands = seq(from = 29,by = 2,length.out = 5),
-                                 psellprice = seq(from = 30,by = 2,length.out = 5),
-                                 ptradetime = 2,plastprice = 8,pvolume = 17,
-                                 ppresettleprice=4,
-                                 fee = fee,
-                                 closeprior = "today",
-                                 timeformat="%Y%m%d%H%M%OS",
-                                 endoftheday="15:15:00.000",
-                                 multiplier=10000)
-        }
-    }
-    else{
-        for(tf in TFs){
-            initializeinstrument(tf,
-                                 pbuyhands = seq(from = 32,by = 1,length.out = 5),
-                                 pbuyprice = seq(from = 22,by = 1,length.out = 5),
-                                 psellhands = seq(from = 37,by = 1,length.out = 5),
-                                 psellprice = seq(from = 27,by = 1,length.out = 5),
-                                 ptradetime = 2,plastprice = 4,pvolume = 12,
-                                 ppresettleprice=8,
-                                 fee = fee,
-                                 closeprior = "today",
-                                 timeformat = "%Y-%m-%d %H:%M:%OS",
-                                 endoftheday="15:15:00.000",
-                                 multiplier = 10000)
-        }
-    }
-    
-    ## if trade center == TRUE, then use lazysubmission()
-    if(.GlobalEnv$tradingstates$tc){
-        orderSync <- lazysubmission
-    }
-    assign("orderSync",orderSync,envir=.GlobalEnv)
-}
-
-initializeSimulator <- function(instruments=c("TF1512","ZN1603")){
-    
-}
 
 ##' perfectexecution
 ##'
@@ -861,7 +735,9 @@ initializeSimulator <- function(instruments=c("TF1512","ZN1603")){
 ##' @export 
 ##' @author Chen
 ##'
-perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,action,type="limit",tradetime=.GlobalEnv$tradingstates$currenttradetime){
+perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,action,type="limit"){
+
+    tradetime=.tradingstates$currenttradetime
 
     if(any(hands<=0)) stop("hands must be greater than zero!")
     if(is(direction,"character") | any(!direction%in%c(-1,1))) stop("direction must be numeric or integer of value  1 or -1!")
@@ -878,15 +754,15 @@ perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,acti
              error=function(e){stop("instrumentid, direction, price, hands and action must be of length one or the same length with the number of orders!!")})
     
     for(i in 1:nrow(orders)){
-        fee <- INSTRUMENT$fee[[instrumentid]]
-        closeprior <- INSTRUMENT$closeprior[[instrumentid]]
-        multiplier <- INSTRUMENT$multiplier[[instrumentid]]
+        fee <- .INSTRUMENT$fee[[instrumentid]]
+        closeprior <- .INSTRUMENT$closeprior[[instrumentid]]
+        multiplier <- .INSTRUMENT$multiplier[[instrumentid]]
         ## additional evaluation expression durring debuging, do not  delete
-        ## eval(parse(text = paste(".GlobalEnv$tradingstates$currenttimeformat <- ",ENV,"$timeformat",sep ="")))
+        ## eval(parse(text = paste(".tradingstates$currenttimeformat <- ",ENV,"$timeformat",sep ="")))
         
         ## add initial hands
         id <- randomid(5)
-        .GlobalEnv$tradingstates$orders <- data.frame(instrumentid="someinstrument",orderid=id,direction=0,price=0,hands=0,action="someaction",initialhands=orders$hands[i],timeoutlist=FALSE,timeoutchase=FALSE,timeoutsleep=1,chaselist=FALSE,chasesleep=1,submitstart=tradetime,stringsAsFactors=FALSE)
+        .tradingstates$orders <- data.frame(instrumentid="someinstrument",orderid=id,direction=0,price=0,hands=0,action="someaction",initialhands=orders$hands[i],timeoutlist=FALSE,timeoutchase=FALSE,timeoutsleep=1,chaselist=FALSE,chasesleep=1,submitstart=tradetime,stringsAsFactors=FALSE)
         
         cost <- .updatecapital(orders$instrumentid[i],orders$direction[i],orders$hands[i],orders$action[i],orders$price[i],fee,closeprior,multiplier)
         .writecapitalhistory(instrumentid=orders$instrumentid[i],tradeprice=orders$price[i],tradehands=orders$hands[i],cost=cost)
@@ -955,7 +831,7 @@ closeall <- function(instrumentid="qtid",price=NULL,type="limit"){
 ##' @author Chen
 ##'
 cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL,pricemax=NULL,orderid=NULL){
-    orders <- .GlobalEnv$tradingstates$orders
+    orders <- .tradingstates$orders
     if(nrow(orders)==0){
         return()
     }
@@ -1019,7 +895,7 @@ cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL
 ##'
 replaceall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL,pricemax=NULL,newprice=NULL){
     ## cancel old orders
-    orders <- .GlobalEnv$tradingstates$orders
+    orders <- .tradingstates$orders
     if(nrow(orders)==0){
         print("no orders to replace")
         return()
@@ -1068,924 +944,25 @@ replaceall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NUL
 ##' }
 ##' @author Chen
 ##'
-lazysubmission <- function(instrumentid,longholding=NULL,shortholding=NULL,tradetime=.GlobalEnv$tradingstates$currenttradetime){
-
-    if(!.GlobalEnv$tradingstates$tc){
+lazysubmission <- function(instrumentid,longholding=NULL,shortholding=NULL){
+    
+    tradetime=.tradingstates$currenttradetime
+    if(!.tradingstates$tc){
         stop("lazysubmission: trade center not enabled! pleas set tc=TRUE at initialization")
     }
     
     if(!is.null(longholding)){
-        .GlobalEnv$tradingstates$th$longholding[.GlobalEnv$tradingstates$th$instrumentid==instrumentid] <- longholding
+        .tradingstates$th$longholding[.tradingstates$th$instrumentid==instrumentid] <- longholding
     }
     if(!is.null(shortholding)){
-        .GlobalEnv$tradingstates$th$shortholding[.GlobalEnv$tradingstates$th$instrumentid==instrumentid] <- shortholding
+        .tradingstates$th$shortholding[.tradingstates$th$instrumentid==instrumentid] <- shortholding
     }
     
     ## update immediatelly
-    .GlobalEnv$tradingstates$justchanged[instrumentid] <- TRUE
-    .GlobalEnv$tradingstates$lastchange[instrumentid] <- tradetime
+    .tradingstates$justchanged[instrumentid] <- TRUE
+    .tradingstates$lastchange[instrumentid] <- tradetime
     .tradecenter(instrumentid)
 
-}
-
-
-
-## analysing tools
-## 1.specific functions------------------
-## 1.1 manipulate 0.5s data
-##' datamanipulation
-##'
-##' datamanipulation
-##' @title datamanipulation
-##' @return formatted data
-##' @author Chen
-##'
-datamanipulation <- function(instrumentdata,instrumentid){
-
-    timeformat <- INSTRUMENT$timeformat[[instrumentid]]
-    plastprice <- INSTRUMENT$plastprice[[instrumentid]]
-    ptradetime <- INSTRUMENT$ptradetime[[instrumentid]]
-    pvolume <- INSTRUMENT$pvolume[[instrumentid]]
-    pbuyhands <- INSTRUMENT$pbuyhands[[instrumentid]]
-    pbuyprice <- INSTRUMENT$pbuyprice[[instrumentid]]
-    psellhands <- INSTRUMENT$psellhands[[instrumentid]]
-    psellprice <- INSTRUMENT$psellprice[[instrumentid]]
-
-    ## basic information and time format
-    instrumentdata <- instrumentdata[,c(ptradetime,plastprice,pvolume,pbuyprice,pbuyhands,psellprice,psellhands)]
-    names(instrumentdata) <- c("tradetime","lastprice","volume",paste("bid",1:length(pbuyprice),sep=""),paste("bidv",1:length(pbuyhands),sep=""),paste("ask",1:length(psellprice),sep=""),paste("askv",1:length(psellhands),sep=""))
-    instrumentdata[-1] <- do.call(cbind.data.frame,llply(instrumentdata[,-1],function(l){round(as.numeric(l),5)}))
-    instrumentdata$volume <- c(0,diff(instrumentdata$volume))
-    instrumentdata$tradetime <- strftime(strptime(instrumentdata$tradetime,format = timeformat),format="%Y-%m-%d %H:%M:%OS")
-
-    ## BI and SI
-    L <- nrow(instrumentdata)
-    instrumentdata$fairness <- "fair"
-    instrumentdata$fairness[c(FALSE,instrumentdata$lastprice[-1]>(instrumentdata$bid1[-L]+instrumentdata$ask1[-L])/2+0.0000001)] <- "head"
-    instrumentdata$fairness[c(FALSE,instrumentdata$lastprice[-1]<(instrumentdata$bid1[-L]+instrumentdata$ask1[-L])/2-0.0000001)] <- "tail"
-
-    return(instrumentdata)
-}
-## 1.2 calculate profit and loss
-##' pnl
-##'
-##' pnl
-##' @title pnl
-##' @return formatted data
-##' @importFrom zoo na.locf
-##' @author Chen
-##'
-pnl <- function(instrumentdata,capitalhistory,instrumentid){
-
-    multiplier <- INSTRUMENT$multiplier[[instrumentid]]
-
-    ## close profit
-    ## closeprofit <- unique(capitalhistory[capitalhistory$totallongholdings==0&capitalhistory$totalshortholdings==0,c("tradetime","cash")])
-    
-    capitalhistory <- ddply(capitalhistory,.(tradetime),function(d){
-    tail(d,1)})
-    pl <- merge(x=instrumentdata[,c("tradetime","lastprice")],y=capitalhistory[,c("tradetime","totallongholdings","totalshortholdings","cash")],by = "tradetime",all.x = TRUE)
-
-    if(is.na(pl$totallongholdings[1]))
-        pl$totallongholdings[1] <- 0
-    if(is.na(pl$totalshortholdings[1]))
-        pl$totalshortholdings[1] <- 0
-    if(is.na(pl$cash[1]))
-        pl$cash[1] <- 0
-    
-    pl$totallongholdings <- na.locf(pl$totallongholdings)
-    pl$totalshortholdings <- na.locf(pl$totalshortholdings)
-    pl$cash <- na.locf(pl$cash)
-
-    return(data.frame(tradetime=pl$tradetime,pl=pl$lastprice*(pl$totallongholdings+pl$totalshortholdings)*multiplier+pl$cash,stringsAsFactors=FALSE))
-    
-}
-## 1.3 max draw-down's range and value
-##' maxdrawdown
-##'
-##' maxdrawdown
-##' @title maxdrawdown
-##' @return a list containing draw-down range and value
-##' @author Chen
-##'
-maxdrawdown <- function(pl,ddown){
-    MAXdown <- min(ddown)
-    minidx <- which.min(ddown)
-    maxidx <- which.max(pl[1:minidx])
-    return(list(starttag=maxidx,endtag=minidx,MAXdown=MAXdown))
-}
-## 1.4 plot
-##' vplayout
-##'
-##' vplayout
-##' @title vplayout
-##' @return layout
-##' @importFrom grid viewport
-##' @author Chen
-##'
-vplayout<-function( x, y ){
-    viewport( layout.pos.row=x, layout.pos.col=y )
-}
-## plot a two column's table, NAME and VALUE
-##' plottwocolumntable
-##'
-##' plottwocolumntable
-##' @title plottwocolumntable
-##' @return plot
-##' @importFrom ggplot2 ggplot geom_text theme_minimal theme
-##' @author Chen
-##'
-plottwocolumntable <- function(d,h1=-1,h2=1,v1=0,v2=0,s=3){
-    names(d) <- c("NAME","VALUE")
-    d <- rbind(data.frame(NAME=" ",VALUE=" "),d)
-    d$y <- (nrow(d):1)*0.5+0.5
-    p5 <- ggplot(d)+geom_text(aes(x=1,y=y,label=NAME),hjust=h1,vjust=v1,size=s)+
-        geom_text(aes(x=2,y=y,label=VALUE),hjust=h2,vjust=v2,size=s)+
-        theme_minimal() + 
-        theme(panel.grid.major = element_blank(), legend.position = "none",panel.border = element_blank(), axis.text.x =  element_blank(),axis.ticks =  element_blank(),axis.title.x=element_blank(),axis.title.y=element_blank())+scale_y_continuous(breaks=NULL)
-    
-    return(p5)
-}
-## pd: vpdata; pl: profit and loss; dd: draw down
-## ddinfo: draw down information; lossinfo: successive loss; wininfo: successive win
-## os: order summary table(ALL traded and cancled); ss: successive profit and loss summary table; pds: profit loss and drawdown summary
-## traded: all and partial traded orders
-##' summaryvpplot
-##'
-##' summaryvpplot
-##' @title summaryvpplot
-##' @return plot
-##' @importFrom ggplot2 ggplot geom_text theme_minimal theme geom_rect xlab ylab geom_line scale_y_continuous scale_x_datetime scale_x_discrete scale_color_identity scale_fill_identity geom_point
-##' @importFrom grid grid.newpage pushViewport grid.layout
-##' @author Chen
-##'
-summaryvpplot <- function(pd,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMMARY=TRUE,TRADED=TRUE){
-    pd$tradetime <- as.POSIXct(pd$tradetime)
-    dd$tradetime <- as.POSIXct(dd$tradetime)
-    pl$tradetime <- as.POSIXct(pl$tradetime)
-    mapper <- c(fair="black",tail="steelblue",head="darkred")
-    pd$fairness <- mapper[pd$fairness]
-
-    ## price
-    pmaxidx <- which.max(pd$lastprice)
-    pminidx <- which.min(pd$lastprice)
-    pd$MAX <- pd$lastprice[pmaxidx]
-    pd$MIN <- pd$lastprice[pminidx]
-
-    ## pl
-    plmaxidx <- which.max(pl$pl)
-    plminidx <- which.min(pl$pl)
-    pl$MAX <- pl$pl[plmaxidx]
-    pl$MIN <- pl$pl[plminidx]
-    
-
-    ## drawdown
-    ddmaxidx <- which.min(dd$ddown)
-
-    ## price and win/loss information
-    p1 <- ggplot(pd)+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(ddinfo$starttag,ddinfo$endtag),],alpha=0.3,fill="blue")+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(lossinfo$starttag,lossinfo$endtag),],alpha=0.3,fill="steelblue")+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(wininfo$starttag,wininfo$endtag),],alpha=0.3,fill="darkred")+
-        geom_line(aes(x=tradetime,y=lastprice))+
-        xlab(NULL)+ylab(NULL)+
-        theme(plot.margin=unit(c(0.5,0.5,0,0.2),units = "in"))+
-        theme(panel.background=element_blank())+
-        theme(panel.grid.major=element_line(linetype = 4,color = "gray40"))+
-        scale_y_continuous(breaks=NULL)+
-        geom_text(aes(x=tradetime,y=lastprice,label=lastprice),data=pd[pmaxidx,],vjust=0.5)+
-        geom_text(aes(x=tradetime,y=lastprice,label=lastprice),data=pd[pminidx,],vjust=0.5)+
-        scale_x_datetime(label=NULL)+
-        scale_color_identity()+
-        scale_fill_identity()
-
-    if(TRADED & nrow(traded)!=0){
-        traded$tradetime <- as.POSIXct(traded$tradetime)
-        longopen <- traded[traded$direction==1&traded$action=="open",]
-        longclose <- traded[traded$direction==1&traded$action=="close",]
-        shortclose <- traded[traded$direction==-1&traded$action=="close",]
-        shortopen <- traded[traded$direction==-1&traded$action=="open",]
-        ## short <- traded[traded$direction==-1,]
-        if(nrow(longopen)!=0)
-            p1 <- p1+geom_text(aes(x=tradetime,y=price,label="↑"),data=longopen,color="darkred",size=2.5)
-        if(nrow(shortclose)!=0)
-            p1 <- p1+geom_text(aes(x=tradetime,y=price,label="#"),data=shortclose,color="darkred",size=2.5)
-        if(nrow(shortopen)!=0)
-            p1 <- p1+geom_text(aes(x=tradetime,y=price,label="↓"),data=shortopen,color="black",size=2.5)
-        if(nrow(longclose)!=0)
-            p1 <- p1+geom_text(aes(x=tradetime,y=price,label="#"),data=longclose,color="black",size=2.5)
-
-
-    }
-    ## geom_text(aes(x=pwintxt,y=(1/3)*lastprice[pminidx]+(2/3)*lastprice[pmaxidx],label=WIN),vjust=0.5,alpha=0.3,size=3,color="black")
-
-
-    ## top left bottom right
-    ## volume
-    vmaxidx <- which.max(pd$volume)
-    p2 <- ggplot(pd)+geom_bar(aes(x=tradetime,y=volume,fill=fairness,color=fairness),stat="identity")+
-        ylab(NULL)+xlab(NULL)+
-        theme(plot.margin=unit(c(0,0.5,0,0.2),units = "in"))+
-        scale_x_datetime(label=NULL)+
-        theme(panel.background=element_blank())+
-        theme(panel.grid.major=element_line(linetype = 4,color = "gray40"))+
-        scale_y_continuous(breaks=NULL)+
-        geom_text(aes(x=tradetime,y=volume,label=volume),data=pd[vmaxidx,],vjust=0.5)+
-        scale_fill_identity()+
-        scale_color_identity()
-
-    p3 <- ggplot(pl)+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pl[c(ddinfo$starttag,ddinfo$endtag),],alpha=0.3,fill="blue")+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pl[c(lossinfo$starttag,lossinfo$endtag),],alpha=0.3,fill="steelblue")+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pl[c(wininfo$starttag,wininfo$endtag),],alpha=0.3,fill="darkred")+
-        scale_color_identity()+
-        scale_fill_identity()+
-        geom_line(aes(x=tradetime,y=pl))+
-        xlab(NULL)+ylab(NULL)+
-        theme(plot.margin=unit(c(0,0.5,0,0.2),units = "in"))+
-        theme(panel.background=element_blank())+
-        theme(panel.grid.major=element_line(linetype = 4,color = "gray40"))+
-        scale_y_continuous(breaks=NULL)+
-        geom_text(aes(x=tradetime,y=pl,label=round(pl,3)),data=pl[plminidx,],vjust=0.5,size=3)+
-        geom_text(aes(x=tradetime,y=pl,label=round(pl,3)),data=pl[plmaxidx,],vjust=0.5,size=3)+
-        scale_x_datetime(label=NULL)
-
-    p4 <- ggplot(dd)+
-        scale_color_identity()+
-        scale_fill_identity()+
-        geom_line(aes(x=tradetime,y=ddown))+
-        xlab(NULL)+ylab(NULL)+
-        theme(plot.margin=unit(c(0,0.5,0.2,0.2),units = "in"))+
-        theme(panel.background=element_blank())+
-        theme(panel.grid.major=element_line(linetype = 4,color = "gray40"))+
-        scale_y_continuous(breaks=NULL)+
-        geom_text(aes(x=tradetime,y=ddown,label=ddown),data=dd[ddmaxidx,],vjust=0.5,size=3)+
-        theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-    grid.newpage()
-    pushViewport(viewport(layout=grid.layout(10,10)))
-    print(p1,vp=vplayout(1:4,1:10))
-    print(p2,vp=vplayout(5:6,1:10))
-    print(p3,vp=vplayout(7:8,1:10))
-    print(p4,vp=vplayout(9:10,1:10))
-
-    if(SUMMARY){
-        ## order summary
-        p5 <- plottwocolumntable(os)
-        print(p5,vp=vplayout(1,4:5))
-        ## successive change summary
-        p6 <- plottwocolumntable(ss)
-        print(p6,vp=vplayout(1:2,8:10))
-        ## profit loss and draw down summary
-        p7 <- plottwocolumntable(pds)
-        print(p7,vp=vplayout(7:8,8:10))
-    }
-
-    ## print(p5,vp=vplayout(8,9))
-
-}
-
-
-## 2.general functions---------------
-## 2.1 draw-down sequence
-drawdown <- function(pl){
-    MAX <- pl[1]
-    ddown <- 0
-    for(i in seq_along(pl)[-1]){
-        MAX <- max(pl[i],MAX)
-        ddown <- c(ddown,pl[i]-MAX)
-    }
-    return(ddown)
-}
-## 2.2 max successive change's range and value
-## return a list
-maxsuccessivechange <- function(sequence,direction,DIFF=TRUE,filtzeros=TRUE){
-    if( (direction!=1 & direction!=-1) | !is.logical(DIFF)){
-        stop("direction must be 1 or -1, DIFF must be logical!")
-    }
-    if(DIFF){
-        sequence <- diff(sequence)
-    }
-    
-    ## neutralize the difference of directions
-    sequence <- sequence*direction
-    
-    ## get successtive change indexes
-    starttags <- which(diff(c(FALSE,sequence>=0))==1)
-    endtags <- which(diff(c(sequence>=0,FALSE))==-1)
-    if(length(starttags)==0){
-        warning("no satisfied sequence fund!")
-        return()
-    }
-    ## calculate cumulate change for each successive period
-    maxsuccessive <- vapply(X=seq_along(starttags),FUN=function(i){
-        sum(sum(sequence[starttags[i]:endtags[i]]))
-    },FUN.VALUE = 0.1)
-    ## locate the max successive change
-    idx <- which.max(maxsuccessive)
-    ## TO DO : add zeros filter to the start and end of successive period---------
-    if(direction==1){
-        return(list(starttag=starttags[idx],endtag=endtags[idx],
-                    MAXchange=max(maxsuccessive)))
-    }else{
-        return(list(starttag=starttags[idx],endtag=endtags[idx],
-                    MAXchange=-max(maxsuccessive)))
-    }
-}
-
-## data, capitalhistory, orderhistory, verbosepriors
-## limitorders: plot which level's limit order price. for example limitorders=c(1,3,4)
-## check the details of a specific limit order
-##' tradesummary
-##' 
-##' summary trade result
-##' 
-##' @title tradesummary
-##' @param instrumentdata data.frame, generated from datasource
-##' @param instrumentid character, specifying instrument id
-##' @param starttime character, must be of format "%H:%M:%S"
-##' @param endtime character, must be of format "%H:%M:%S"
-##' @return a named list and a plot
-##' @export
-##' @author Chen
-tradesummary <- function(instrumentdata,instrumentid="qtid",limitorders=NULL,starttime="09:15:00.000",endtime="15:15:00.000",SUMMARY=TRUE,TRADED=TRUE){
-    
-    ## data manipulation
-    instrumentdata <- datamanipulation(instrumentdata,instrumentid)
-
-    if(!is.null(starttime) & !is.null(endtime)){
-        hfm <- strftime(as.POSIXct(instrumentdata$tradetime),"%H:%M:%OS")
-        instrumentdata <- instrumentdata[hfm>=starttime & hfm<=endtime,]
-    }
-    if(nrow(instrumentdata)==0)
-        stop("no data in selected time period!")
-    
-    ## get curren instrument's order and capital history
-
-    orders <- .GlobalEnv$tradingstates$orderhistory[.GlobalEnv$tradingstates$orderhistory$instrumentid==instrumentid,]
-    if(!is.null(starttime) & !is.null(endtime)){
-        hfm <- strftime(as.POSIXct(orders$tradetime),"%H:%M:%OS")
-        orders <- orders[hfm>=starttime & hfm<=endtime,]
-    }
-    capital <- .GlobalEnv$tradingstates$capitalhistory[.GlobalEnv$tradingstates$capitalhistory$instrumentid==instrumentid,]
-    if(!is.null(starttime) & !is.null(endtime)){
-        hfm <- strftime(as.POSIXct(capital$tradetime),"%H:%M:%OS")
-        capital <- capital[hfm>=starttime & hfm<=endtime,]
-    }
-
-    ## profit and loss
-    pl <- pnl(instrumentdata,capital,instrumentid)
-    ## draw-down
-    dd <- data.frame(tradetime=instrumentdata$tradetime,
-                     ddown=drawdown(pl$pl))
-
-    ## draw-down details
-    ddinfo <- maxdrawdown(pl=pl$pl,ddown = dd$ddown)
-    ## successive win or loss details
-    lossinfo <- maxsuccessivechange(sequence=pl$pl,direction = -1,DIFF = TRUE)
-    wininfo <- maxsuccessivechange(sequence=pl$pl,direction = 1,DIFF = TRUE)
-
-    ## order summary
-    os <- as.data.frame(table(orders$status),stringsAsFactors = FALSE)
-    os <- os[os$Var1%in%c("0","5"),]
-    statusmapper <- c(`0`="executed orders:",`5`="canceled orders:")
-    os$Var1 <- statusmapper[os$Var1]
-
-    ## profit and loos period summary:
-    ss <- data.frame(
-        NAME=c("     draw-donw start:","     draw-down end:","successive loss start:","successive loss end:","successive win start:","successive win end:"),
-        value=strftime(c(dd$tradetime[ddinfo$starttag],dd$tradetime[ddinfo$endtag],pl$tradetime[lossinfo$starttag],pl$tradetime[lossinfo$endtag],pl$tradetime[wininfo$starttag],pl$tradetime[wininfo$endtag]),"%H:%M:%OS")
-    )
-
-    ## pl drawdown summary
-    pds <- data.frame(
-        NAME=c("                    max pl:","          max draw-donw:","max successive loss","max successive win"),
-        VALUE=c(round(max(pl$pl),3),round(ddinfo$MAXdown,3),round(lossinfo$MAXchange,3),round(wininfo$MAXchange,3))
-        )
-
-    ## all traded and partially traded
-    traded <- orders[orders$status%in%c(0,1),c("tradetime","direction","price","action")]
-
-    summaryvpplot(instrumentdata,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMMARY = SUMMARY,TRADED = TRADED)
-
-    invisible(list(orderhistory=orders,capitalhistory=capital,
-                   pl=pl,dd=dd,ddinfo=ddinfo,lossinfo=lossinfo,wininfo=wininfo,
-                   traded=unique(orders[orders$status%in%c(0,1),c("tradetime","orderid","direction")]),
-                   partiallytraded=unique(orders[orders$status==1,c("tradetime","orderid")]),
-                   canceled=unique(orders[orders$status==5,c("tradetime","orderid")])
-                   )
-              )
-    
-}
-## check the details of a specific limit order
-##' checklimit
-##' 
-##' check limit order details
-##' 
-##' @title checklimit
-##' @param instrumentdata data.frame, generated from datasource
-##' @param orderid character, specifying id of the limit order
-##' @return plot
-##' @importFrom ggplot2 ggplot geom_text theme_minimal theme geom_rect xlab ylab geom_line scale_y_continuous scale_x_datetime scale_x_discrete scale_color_identity scale_fill_identity geom_point
-##' @importFrom grid grid.newpage pushViewport grid.layout
-##' @export
-##' @author Chen
-checklimit <- function(instrumentdata,orderid){
-    currentorder <- head(tradingstates$orderhistory[tradingstates$orderhistory$orderid==orderid,],1)
-    if(nrow(currentorder)==0){stop("can't find ",orderid)}
-    if(currentorder$price==0)(stop("must be a limit order!"))
-    instrumentdata <- datamanipulation(instrumentdata,currentorder$instrumentid)
-    ## limit? market?
-    ## traded? canceled?
-    ## time mapping
-
-    ## locate current order and corresponding market data
-    if(is.null(tradingstates$verbosepriors)){warning("can't find any verbose information")}
-    startandend <- range(tradingstates$orderhistory$tradetime[tradingstates$orderhistory$orderid==orderid])
-    timeidx <- names(tradingstates$verbosepriors)
-    timeidx <- timeidx>=startandend[1] & timeidx<=startandend[2]
-    currentverbose <- tradingstates$verbosepriors[timeidx]
-    currentdata <- instrumentdata[instrumentdata$tradetime>=startandend[1] & instrumentdata$tradetime<=startandend[2],]
-    ## filter all records without updates
-    updateidx <- c(TRUE,
-                   vapply(X=2:length(currentverbose),FUN=function(i){
-                       return(!identical(currentverbose[[i]][[orderid]],currentverbose[[i-1]][[orderid]]))
-                   },FUN.VALUE = TRUE)
-                   )
-    updateidx[length(updateidx)] <- TRUE
-    currentverbose <- currentverbose[updateidx]
-    ## extract current order's change records, generate a data.frame
-    d <- data.frame(tradetime=character(),hands=numeric(),price=numeric(),stringsAsFactors = FALSE)
-    for(i in seq_along(currentverbose)){
-        co <- currentverbose[[i]][[orderid]]
-        ct <- data.frame(tradetime=rep(names(currentverbose[i]),nrow(co)))
-        d <- rbind(d,cbind(ct,co))
-    }
-
-    ## 1.plot current order change
-    d$price <- as.character(d$price)
-    d$x <- as.factor(strftime(d$tradetime,format = "%H:%M:%OS"))
-    d$y <- ddply(d,.(tradetime),function(x){data.frame(y=cumsum(c(0,x$hands[-nrow(x)]))+ceiling(x$hands/2))})$y #generate label positions
-    p1 <- ggplot(d)+geom_bar(aes(x=x,y=hands,fill=price),position = "stack",stat = "identity")+scale_y_discrete(breaks=NULL)+scale_fill_grey()+geom_text(aes(x=x,y=y,label=paste(price,hands,sep = " : ")),size=4)+xlab(NULL)+theme(panel.background=element_blank())
-    ## 2.plot corresponding orderbook change
-    currentidx <- currentdata$tradetime%in%names(currentverbose)
-    currentbook <- currentdata[currentidx,]
-    if(currentorder$direction==1){
-        currentbook <- currentbook[,c("tradetime",grep("bid",names(currentbook),value = TRUE))]
-    }else{
-        currentbook <- currentbook[,c("tradetime",grep("ask",names(currentbook),value = TRUE))]
-    }
-    prices <- currentbook[,2:((ncol(currentbook)-1)/2+1)]
-    handss <- currentbook[,((ncol(currentbook)-1)/2+2):ncol(currentbook)]
-    d2 <- data.frame(tradetime=character(),hands=numeric(),price=numeric(),stringsAsFactors = FALSE)
-    for(i in 1:nrow(currentbook)){
-        d2 <- rbind(d2,data.frame(tradetime=currentbook$tradetime[i],hands=as.numeric(handss[i,]),price=as.numeric(prices[i,]),stringsAsFactors = FALSE))
-    }
-    d2$x <- as.factor(strftime(d2$tradetime,format = "%H:%M:%OS"))
-    d2$y <- rep((nrow(d2)/length(unique(d2$tradetime))):1,length(unique(d2$tradetime)))
-    d2$label <- paste(d2$price,d2$hands,sep = " : ")
-    p2 <- ggplot(d2)+geom_text(aes(x=x,y=y,label=label),size=4)+theme(panel.background=element_blank(),panel.grid.major=element_line(linetype = 4,color = "gray40"))+xlab(NULL)+ylab(NULL)
-    
-    ## 3. plot corresponding market data
-    if(nrow(currentdata)>20){
-        ## character is discrete but POSIXct is continuous
-        currentdata$tradetime <- as.POSIXct(currentdata$tradetime)
-    }
-    mapper <- c(fair="black",tail="steelblue",head="darkred")
-    currentdata$fairness <- mapper[currentdata$fairness]
-    pmaxidx <- which.max(currentdata$lastprice)
-    pminidx <- which.min(currentdata$lastprice)
-    p3 <- ggplot(currentdata)+
-        xlab(NULL)+ylab(NULL)+
-        theme(plot.margin=unit(c(0.5,0.5,0,0.2),units = "in"))+
-        theme(panel.background=element_blank(),legend.position = "none")+
-        theme(panel.grid.major=element_line(linetype = 4,color = "gray40"))+
-        scale_y_continuous(breaks=NULL)+
-        geom_text(aes(x=tradetime,y=lastprice,label=lastprice),data=currentdata[pmaxidx,],vjust=0.5)+
-        geom_text(aes(x=tradetime,y=lastprice,label=lastprice),data=currentdata[pminidx,],vjust=0.5)
-    if(nrow(currentdata)>20){
-        p3 <- p3+geom_line(aes(x=tradetime,y=lastprice))+scale_x_datetime(label=NULL)
-    }else{       #break=prettyDate can't handle too small time period
-        p3 <- p3+geom_line(aes(x=tradetime,y=lastprice,group="1"))+scale_x_discrete(label="")
-    }
-
-    ## 3.5 order information
-    currentstatus <- tradingstates$orderhistory[tradingstates$orderhistory$tradetime%in%names(currentverbose)&tradingstates$orderhistory$orderid==orderid,]
-    if(nrow(currentdata)>20){
-        currentstatus$tradetime <- as.POSIXct(currentstatus$tradetime)
-    }
-    currentstatus$status <- as.character(currentstatus$status)
-    p3 <- p3+geom_point(aes(x=tradetime,y=price,color=status,shape=status,fill=status),data = currentstatus)
-
-    ## top left bottom right
-    ## 4.volume
-    p4 <- ggplot(currentdata)+geom_bar(aes(x=tradetime,y=volume,fill=fairness,color=fairness),stat="identity")+
-        ylab(NULL)+xlab(NULL)+
-        theme(plot.margin=unit(c(0,0.5,0.2,0.2),units = "in"))+
-        theme(panel.background=element_blank())+
-        theme(panel.grid.major=element_line(linetype = 4,color = "gray40"))+
-        scale_y_continuous(breaks=NULL)+
-        geom_text(aes(x=tradetime,y=volume,label=volume),data=currentdata[currentidx,],vjust=0.5)+
-        scale_fill_identity()+
-        scale_color_identity()
-    if(nrow(currentdata)>20){
-        p4 <- p4+scale_x_datetime()
-    }else{       #break=prettyDate can't handle too small time period
-          p4 <- p4+scale_x_discrete(label=strftime(currentdata$tradetime,format = "%M:%OS"),breaks=currentdata$tradetime)
-    }
-
-    ## scale_x_datetime(label=NULL)
-
-    grid.newpage()
-    pushViewport(viewport(layout=grid.layout(10,10)))
-    print(p3,vp=vplayout(1:4,1:10))
-    print(p4,vp=vplayout(5:6,1:10))
-    print(p2,vp=vplayout(7:8,1:10))
-    print(p1,vp=vplayout(9:10,1:10))
-}
-
-
-##' initializeEnv
-##' 
-##'  initialize all simulator states
-##' 
-##' @export
-##' @examples
-##'\dontrun{
-##' instruments <- c("AL1603", "TF1606", "AU1606")
-##' detail <- getdetail(instruments)
-##' initializeENV(realtimeDATA = FALSE,ENVname = "AL",instruments = instruments[1],exchange = detail$exchanges[1],multiplier = detail$multipliers[1],endoftheday = detail$endofthedays[1])
-##' initializeENV(realtimeDATA = FALSE,ENVname = "TF",instruments = instruments[2],exchange = detail$exchanges[2],multiplier = detail$multipliers[2],endoftheday = detail$endofthedays[2])
-##' }
-##'
-initializeENV <- function(realtimeDATA,instruments,exchanges,multipliers,endofthedays,fee=c(long=0.000004,short=0.000004,closetoday=0.000004,closepreday=0.000004),closeprior="preday",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
-    if(missing(realtimeDATA)|missing(exchanges)|missing(multipliers)|missing(endofthedays)){
-        stop("realtimeDATA, exchanges, multipliers and endofthedays must be specified!")
-    }
-    if(!all(exchanges%in%c("CFE","SHF","DCE","CZCE"))){
-        stop("exchange must be one of CFE, SHF, DCE or CZCE")
-    }
-
-    ## initialize states
-    initializestates(tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
-
-    tryCatch(tmp <- data.frame(instruments=instruments,exchanges=exchanges,multipliers=multipliers,endofthedays=endofthedays,stringsAsFactors = FALSE),
-             warning=function(w){
-                 stop("exchanges, multipliers, endofthedays can either be length one or the same length as instruments!")
-             },
-             error=function(e){
-                 stop("exchanges, multipliers, endofthedays can either be length one or the same length as instruments!")
-             }
-             )
-
-    ## for ifelse only supprot length one output
-    IFELSE <- function(CONDITION,yes,no){
-        if(CONDITION){
-            return(yes)
-        }else{
-            return(no)
-        }
-    }
-
-    for(i in 1:nrow(tmp)){
-        exchange <- tmp$exchanges[i]
-        instrument <- tmp$instruments[i]
-        endoftheday <- tmp$endofthedays[i]
-        multiplier <- tmp$multipliers[i]
-        
-        pbuyhands <- switch(exchange,
-                            CFE=IFELSE(realtimeDATA,
-                                       seq(from = 19,by = 2,length.out = 5),
-                                       seq(from = 32,by = 1,length.out = 5)),
-                            SHF=IFELSE(realtimeDATA,20,30),
-                            DCE=IFELSE(realtimeDATA,0,0),
-                            CZCE=IFELSE(realtimeDATA,0,0)
-                            )
-        pbuyprice <- switch(exchange,
-                            CFE=IFELSE(realtimeDATA,
-                                       seq(from = 20,by = 2,length.out = 5),
-                                       seq(from = 22,by = 1,length.out = 5)),
-                            SHF=IFELSE(realtimeDATA,19,28),
-                            DCE=IFELSE(realtimeDATA,0,0),
-                            CZCE=IFELSE(realtimeDATA,0,0)
-                            )
-        psellhands <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,
-                                        seq(from = 29,by = 2,length.out = 5),
-                                        seq(from = 37,by = 1,length.out = 5)),
-                             SHF=IFELSE(realtimeDATA,22,29),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        psellprice <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,
-                                        seq(from = 30,by = 2,length.out = 5),
-                                        seq(from = 27,by = 1,length.out = 5)),
-                             SHF=IFELSE(realtimeDATA,21,27),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        ptradetime <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,2,2),
-                             SHF=IFELSE(realtimeDATA,2,2),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        plastprice <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,8,4),
-                             SHF=IFELSE(realtimeDATA,3,4),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        pvolume <- switch(exchange,
-                          CFE=IFELSE(realtimeDATA,17,12),
-                          SHF=IFELSE(realtimeDATA,10,8),
-                          DCE=IFELSE(realtimeDATA,0,0),
-                          CZCE=IFELSE(realtimeDATA,0,0)
-                          )
-        ppresettleprice <- switch(exchange,
-                              CFE=IFELSE(realtimeDATA,4,8),
-                              SHF=IFELSE(realtimeDATA,4,16),
-                              DCE=IFELSE(realtimeDATA,0,0),
-                              CZCE=IFELSE(realtimeDATA,0,0)
-                              )
-        ## closeprior <- "preday"        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        timeformat <- IFELSE(realtimeDATA,"%Y%m%d%H%M%OS",
-                         "%Y-%m-%d %H:%M:%OS")
-        initializeinstrument(instrument,
-                             pbuyhands = pbuyhands,
-                             pbuyprice = pbuyprice,
-                             psellhands = psellhands,
-                             psellprice = psellprice,
-                             ptradetime = ptradetime,
-                             plastprice = plastprice,
-                             pvolume = pvolume,
-                             ppresettleprice=ppresettleprice,
-                             fee = fee,
-                             closeprior = closeprior,
-                             timeformat= timeformat,
-                             endoftheday= endoftheday,
-                             multiplier=multiplier)
-    }
-}
-
-initializeENV.rough <- function(realtimeDATA,instruments,exchanges,multipliers,endofthedays,fee=c(long=0.000004,short=0.000004,closetoday=0.000004,closepreday=0.000004),closeprior="preday",tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE){
-    if(missing(realtimeDATA)|missing(exchanges)|missing(multipliers)|missing(endofthedays)){
-        stop("realtimeDATA, exchanges, multipliers and endofthedays must be specified!")
-    }
-    if(!all(exchanges%in%c("CFE","SHF","DCE","CZCE"))){
-        stop("exchange must be one of CFE, SHF, DCE or CZCE")
-    }
-
-    ## initialize states
-    initializestates(tc=tc,Sleep=Sleep,IMLAZY=IMLAZY,DIGITSSECS=DIGITSSECS,STRINGSASFACTORS=STRINGSASFACTORS,septraded=septraded,unclosed=unclosed,closed=closed,interdaily = interdaily)
-
-    tryCatch(tmp <- data.frame(instruments=instruments,exchanges=exchanges,multipliers=multipliers,endofthedays=endofthedays,stringsAsFactors = FALSE),
-             warning=function(w){
-                 stop("exchanges, multipliers, endofthedays can either be length one or the same length as instruments!")
-             },
-             error=function(e){
-                 stop("exchanges, multipliers, endofthedays can either be length one or the same length as instruments!")
-             }
-             )
-
-    ## for ifelse only supprot length one output
-    IFELSE <- function(CONDITION,yes,no){
-        if(CONDITION){
-            return(yes)
-        }else{
-            return(no)
-        }
-    }
-
-    for(i in 1:nrow(tmp)){
-        exchange <- tmp$exchanges[i]
-        instrument <- tmp$instruments[i]
-        endoftheday <- tmp$endofthedays[i]
-        multiplier <- tmp$multipliers[i]
-        
-        pbuyhands <- switch(exchange,
-                            CFE=IFELSE(realtimeDATA,
-                                       seq(from = 19,by = 2,length.out = 5),
-                                       seq(from = 32,by = 1,length.out = 5)),
-                            SHF=IFELSE(realtimeDATA,20,30),
-                            DCE=IFELSE(realtimeDATA,0,0),
-                            CZCE=IFELSE(realtimeDATA,0,0)
-                            )
-        pbuyprice <- switch(exchange,
-                            CFE=IFELSE(realtimeDATA,
-                                       seq(from = 20,by = 2,length.out = 5),
-                                       seq(from = 22,by = 1,length.out = 5)),
-                            SHF=IFELSE(realtimeDATA,19,28),
-                            DCE=IFELSE(realtimeDATA,0,0),
-                            CZCE=IFELSE(realtimeDATA,0,0)
-                            )
-        psellhands <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,
-                                        seq(from = 29,by = 2,length.out = 5),
-                                        seq(from = 37,by = 1,length.out = 5)),
-                             SHF=IFELSE(realtimeDATA,22,29),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        psellprice <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,
-                                        seq(from = 30,by = 2,length.out = 5),
-                                        seq(from = 27,by = 1,length.out = 5)),
-                             SHF=IFELSE(realtimeDATA,21,27),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        ptradetime <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,2,2),
-                             SHF=IFELSE(realtimeDATA,2,2),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        plastprice <- switch(exchange,
-                             CFE=IFELSE(realtimeDATA,8,4),
-                             SHF=IFELSE(realtimeDATA,3,4),
-                             DCE=IFELSE(realtimeDATA,0,0),
-                             CZCE=IFELSE(realtimeDATA,0,0)
-                             )
-        pvolume <- switch(exchange,
-                          CFE=IFELSE(realtimeDATA,17,12),
-                          SHF=IFELSE(realtimeDATA,10,8),
-                          DCE=IFELSE(realtimeDATA,0,0),
-                          CZCE=IFELSE(realtimeDATA,0,0)
-                          )
-        ppresettleprice <- switch(exchange,
-                              CFE=IFELSE(realtimeDATA,4,8),
-                              SHF=IFELSE(realtimeDATA,4,16),
-                              DCE=IFELSE(realtimeDATA,0,0),
-                              CZCE=IFELSE(realtimeDATA,0,0)
-                              )
-        ## closeprior <- "preday"        #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        timeformat <- IFELSE(realtimeDATA,"%Y%m%d%H%M%OS",
-                         "%Y-%m-%d %H:%M:%OS")
-        initializeinstrument(instrument,
-                             pbuyhands = pbuyhands,
-                             pbuyprice = pbuyprice,
-                             psellhands = psellhands,
-                             psellprice = psellprice,
-                             ptradetime = ptradetime,
-                             plastprice = plastprice,
-                             pvolume = pvolume,
-                             ppresettleprice=ppresettleprice,
-                             fee = fee,
-                             closeprior = closeprior,
-                             timeformat= timeformat,
-                             endoftheday= endoftheday,
-                             multiplier=multiplier)
-    }
-}
-
-## Environment Tweaks-------------------
-
-## 
-
-##' resetma
-##' 
-##'  reset moving average environment
-##'
-##' @export
-##'
-resetma <- function(){
-    if(exists("movingenv",envir=globalenv())){
-        rm("movingenv",envir = globalenv())
-    }
-}
-
-##' updatemean
-##' 
-##'  upedate mean online
-##'
-##' @export
-##'
-updatemean <- function(xnew,xold,meanold,n){
-    meanold+(xnew-xold)/n
-}
-
-##' updatevar
-##' 
-##'  upedate var online
-##'
-##' @export
-##'
-updatevar <- function(xnew,xold,meanold,varold,n){
-    meannew <- updatemean(xnew,xold,meanold,n)
-    varnew <-  varold+(-(xold-meanold)^2+(n-1)*(meanold-meannew)^2-2*(meanold-meannew)*(xold-meanold)+(xnew-meannew)^2)/n
-    return(list(meannew=meannew,varnew=varnew))
-}
-
-##' moving average
-##' 
-##'  generate 2 series: original and mean
-##'
-##' @export
-##'
-movingaverage <- function(objectname,n,IMLAZY=TRUE,LAZYLAG=3){
-    if(!exists("movingenv",envir=globalenv())){
-        movingenv <- new.env(parent = globalenv())
-        movingenv$origin <- c(parent.frame()[[objectname]],rep(NA,n-1))
-        movingenv$ma <- rep(as.numeric(NA),n)
-        movingenv$ncum <- 0L
-        movingenv$N <- n
-        movingenv$tmp <- numeric(1)
-        assign("movingenv",movingenv,envir = globalenv())
-        ## generate expressions
-        if(IMLAZY){
-            if(!exists("tradingstates",envir=globalenv())){
-                warning("tradingstates is NULL, better initialize simulator before using this function")
-            }else{
-                if(.GlobalEnv$tradingstates$IMLAZY==FALSE){
-                    warning("part of LAZY functions are not generated! Please set IMLAZY=TRUE in initializestates().")
-                }
-            }
-            .furtherlazyfunctions()
-            for(i in 1:min(LAZYLAG,n)){
-                a <- parse(text = paste(".GlobalEnv$movingenv$origin[.GlobalEnv$movingenv$N-",i-1,"L]",sep = ""))
-                b <- parse(text = paste(".GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N-",i-1,"L]",sep = ""))
-                assign(paste(objectname,".t",i-1L,sep = ""),a,envir = globalenv())
-                assign(paste(objectname,"ma.t",i-1L,sep = ""),b,envir = globalenv())
-            }
-        }
-    }
-    if(.GlobalEnv$movingenv$ncum>n-1){
-        .GlobalEnv$movingenv$tmp <- updatemean(xnew = parent.frame()[[objectname]],xold = .GlobalEnv$movingenv$origin[1],meanold = .GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N],n=.GlobalEnv$movingenv$N)
-        .GlobalEnv$movingenv$origin <- c(.GlobalEnv$movingenv$origin[-1],parent.frame()[[objectname]])
-        .GlobalEnv$movingenv$ncum <- .GlobalEnv$movingenv$ncum+1L
-        .GlobalEnv$movingenv$ma <- c(.GlobalEnv$movingenv$ma[-1],.GlobalEnv$movingenv$tmp)
-    }
-    else if(.GlobalEnv$movingenv$ncum<n-1){
-        .GlobalEnv$movingenv$origin <- c(.GlobalEnv$movingenv$origin[-1],parent.frame()[[objectname]])
-        .GlobalEnv$movingenv$ncum <- .GlobalEnv$movingenv$ncum+1L
-        return()
-    }
-    else{
-        ## .GlobalEnv$movingenv$ncum==n-1
-        .GlobalEnv$movingenv$origin <- c(.GlobalEnv$movingenv$origin[-1],parent.frame()[[objectname]])
-        .GlobalEnv$movingenv$ncum <- .GlobalEnv$movingenv$ncum+1L
-        .GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N] <- mean(.GlobalEnv$movingenv$origin)
-    }
-}
-
-##' moving variance
-##' 
-##'  generate 3 series: original, mean and var
-##'
-##' @export
-##'
-movingvariance <- function(objectname,n,IMLAZY=TRUE,LAZYLAG=3){
-    if(!exists("movingenv",envir=globalenv())){
-        movingenv <- new.env(parent = globalenv())
-        movingenv$origin <- c(parent.frame()[[objectname]],rep(NA,n-1))
-        movingenv$ma <- rep(as.numeric(NA),n)
-        movingenv$mv <- rep(as.numeric(NA),n)
-        movingenv$ncum <- 0L
-        movingenv$N <- n
-        movingenv$tmp <- list(meannew=numeric(1),varnew=numeric(1))
-        assign("movingenv",movingenv,envir = globalenv())
-        ## generate expressions
-        if(IMLAZY){
-            if(!exists("tradingstates",envir=globalenv())){
-                warning("tradingstates is NULL, better initialize simulator before using this function")
-            }else{
-                if(.GlobalEnv$tradingstates$IMLAZY==FALSE){
-                    warning("part of LAZY functions are not generated! Please set IMLAZY=TRUE in initializestates().")
-                }
-            }
-            .furtherlazyfunctions()
-            for(i in 1:min(LAZYLAG,n)){
-                a <- parse(text = paste(".GlobalEnv$movingenv$origin[.GlobalEnv$movingenv$N-",i-1,"L]",sep = ""))
-                b <- parse(text = paste(".GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N-",i-1,"L]",sep = ""))
-                c <- parse(text = paste(".GlobalEnv$movingenv$mv[.GlobalEnv$movingenv$N-",i-1,"L]",sep = ""))
-                assign(paste(objectname,".t",i-1L,sep = ""),a,envir = globalenv())
-                assign(paste(objectname,".ma.t",i-1L,sep = ""),b,envir = globalenv())
-                assign(paste(objectname,".mv.t",i-1L,sep = ""),c,envir = globalenv())
-            }
-        }
-    }
-    if(.GlobalEnv$movingenv$ncum>n-1){
-        .GlobalEnv$movingenv$tmp <- updatevar(xnew = parent.frame()[[objectname]],xold = .GlobalEnv$movingenv$origin[1],meanold = .GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N],varold = .GlobalEnv$movingenv$mv[.GlobalEnv$movingenv$N],n=.GlobalEnv$movingenv$N)
-        .GlobalEnv$movingenv$origin <- c(.GlobalEnv$movingenv$origin[-1],parent.frame()[[objectname]])
-        .GlobalEnv$movingenv$ncum <- .GlobalEnv$movingenv$ncum+1L
-        .GlobalEnv$movingenv$ma <- c(.GlobalEnv$movingenv$ma[-1],.GlobalEnv$movingenv$tmp$meannew)
-        .GlobalEnv$movingenv$mv <- c(.GlobalEnv$movingenv$mv[-1],.GlobalEnv$movingenv$tmp$varnew)
-    }
-    else if(.GlobalEnv$movingenv$ncum<n-1){
-        .GlobalEnv$movingenv$origin <- c(.GlobalEnv$movingenv$origin[-1],parent.frame()[[objectname]])
-        .GlobalEnv$movingenv$ncum <- .GlobalEnv$movingenv$ncum+1L
-        return()
-    }
-    else{
-        ## .GlobalEnv$movingenv$ncum==n-1
-        .GlobalEnv$movingenv$origin <- c(.GlobalEnv$movingenv$origin[-1],parent.frame()[[objectname]])
-        .GlobalEnv$movingenv$ncum <- .GlobalEnv$movingenv$ncum+1L
-        .GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N] <- mean(.GlobalEnv$movingenv$origin)
-        .GlobalEnv$movingenv$mv[.GlobalEnv$movingenv$N] <- sum((.GlobalEnv$movingenv$origin-.GlobalEnv$movingenv$ma[.GlobalEnv$movingenv$N])^2)/.GlobalEnv$movingenv$N
-        
-    }
 }
 
 ## cancelallother cancel all other orders other than specific levels
@@ -1993,12 +970,12 @@ movingvariance <- function(objectname,n,IMLAZY=TRUE,LAZYLAG=3){
 ## cancelsub cancel all orders with lower priority price
 ## cancelnotinthebook cancel orders not in orderbook
 submitmultilevelopen <- function(instrumentid,LEVELS=c(1,2),hands=1,cancelallother=FALSE,cancelprime=FALSE,cancelsub=FALSE,DIRECTION=1,cancelnotinthebook=FALSE){
-    LIMITS <- subset(.GlobalEnv$tradingstates$orders,price!=0&direction==DIRECTION)
+    LIMITS <- subset(.tradingstates$orders,price!=0&direction==DIRECTION)
     if(DIRECTION==1){
-        orderbook <- INSTRUMENT$orderbook[[instrumentid]]$buybook
+        orderbook <- .INSTRUMENT$orderbook[[instrumentid]]$buybook
     }
     else{
-        orderbook <- INSTRUMENT$orderbook[[instrumentid]]$sellbook
+        orderbook <- .INSTRUMENT$orderbook[[instrumentid]]$sellbook
     }
 
     if(nrow(LIMITS)!=0){
@@ -2047,15 +1024,15 @@ submitmultilevelopen <- function(instrumentid,LEVELS=c(1,2),hands=1,cancelalloth
 
 chasecloseall <- function(instrumentid,chasesleep=1){
     ## long holdings
-    LH <- .GlobalEnv$tradingstates$capital$totallongholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid]
+    LH <- .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid]
     ## short holdigns
-    SH <- .GlobalEnv$tradingstates$capital$totalshortholdings[.GlobalEnv$tradingstates$capital$instrumentid==instrumentid]
+    SH <- .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid]
     ## long close
-    LC <- sum(.GlobalEnv$tradingstates$orders$hands[.GlobalEnv$tradingstates$orders$instrumentid==instrumentid & .GlobalEnv$tradingstates$orders$direction==1 & .GlobalEnv$tradingstates$orders$action=="close"])
+    LC <- sum(.tradingstates$orders$hands[.tradingstates$orders$instrumentid==instrumentid & .tradingstates$orders$direction==1 & .tradingstates$orders$action=="close"])
     ## short close
-    SC <- sum(.GlobalEnv$tradingstates$orders$hands[.GlobalEnv$tradingstates$orders$instrumentid==instrumentid & .GlobalEnv$tradingstates$orders$direction==-1 & .GlobalEnv$tradingstates$orders$action=="close"])
+    SC <- sum(.tradingstates$orders$hands[.tradingstates$orders$instrumentid==instrumentid & .tradingstates$orders$direction==-1 & .tradingstates$orders$action=="close"])
 
-    orderbook <- .GlobalEnv$INSTRUMENT$orderbook[[instrumentid]]
+    orderbook <- .INSTRUMENT$orderbook[[instrumentid]]
 
     if(LH-SC>0){
         chasesubmission(instrumentid=instrumentid,orderid = randomid(5),
@@ -2104,47 +1081,12 @@ BSO <- function(orderbook,preorderbook,bsi){
 }
 
 
-## ## 1. agents: output target holdings' signal
-## ## 2. riskmanager
-## ## 3. assetallocator
 
-## agent <- function(){}
-## riskmanager.instrument <- function(){}
-## ## input: pnls of all instruments
-## riskmanager.portfolio <- function(){}
-## allocator <- function(){}
-
-## agent.backtest <- function(){}
-
-## ## series: numeric, price series
-## ## trades: integer, indicating trade indexes in price series
-## ## targetholdings: integer, target long or short holdings, length(targetholdings) must equal length(trades)
-## ## pertradedd: numeric, each trade's max allowable drawdown
-## ## cumdd: numeric, max allowable drawdown
-## riskmanager.instrument.backtest <- function(series,trades,targetholdings,pertradedd,cumdd,slippage){
-##     L <- length(series)
-##     if(length(trades)!=length(targetholdings)){stop("unequal number of trades")}
-##     ## 1. per trade, return pl of each trade
-##     eachtrade <- sapply(1:length(trades),function(i){
-##         pl <- (series[trades[i]:min(trades[i+1],L,na.rm=TRUE)]-series[trades[i]])*targetholdings[i]-slippage*abs(targetholdings[i])
-##         STOP <- which(drawdown(pl)<=pertradedd)[1]
-##         if(is.na(STOP)){
-##             return(tail(pl,1))
-##         }else{
-##             return(pl[STOP])
-##         }
-##     })
-##     ## 2. cumtrade
-##     ## STOP <- which(drawdown(eachtrade)<=cumdd)[1]
-##     STOP <- which(drawdown(cumsum(eachtrade))<=cumdd)[1]
-##     if(is.na(STOP)){
-##         return(eachtrade)
-##     }else{
-##         ## return(sum(eachtrade[1:STOP]))
-##         return(eachtrade[1:STOP])
-##     }
-## }
-
-## riskmanager.portfolio.backtest <- function(){}
-## allocator.backtest <- function(){}
-
+hftsimulator <- function(stg){
+    if(!is(stg,"function")){
+        stop(substitute(stg),"is not a function!")
+    }
+    ## garbage picker
+    garbagepicker <- eval(parse(text = deparse(stg)))
+    
+}
