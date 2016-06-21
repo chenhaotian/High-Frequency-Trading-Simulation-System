@@ -1,4 +1,3 @@
-tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE
 
 options(digits.secs=DIGITSSECS)
 options(stringsAsFactors = STRINGSASFACTORS)
@@ -1082,11 +1081,24 @@ BSO <- function(orderbook,preorderbook,bsi){
 
 
 
-hftsimulator <- function(stg){
+
+
+
+
+
+HFTsimulator <- function(stg,
+                         tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE,
+                         instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,ppresettleprice,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000){
     if(!is(stg,"function")){
         stop(substitute(stg),"is not a function!")
     }
     ## garbage picker
     garbagepicker <- eval(parse(text = deparse(stg)))
+
+    ## environment settings
+    options(digits.secs=DIGITSSECS)
+    options(stringsAsFactors = STRINGSASFACTORS)
+    
+
     
 }
