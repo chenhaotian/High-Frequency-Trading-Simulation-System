@@ -3,7 +3,7 @@
     
     return(
         switch(info,
-               tradetime=strftime(strptime(TRADETIME,timeformat),format = "%Y-%m-%d %H:%M:%OS"),
+               tradetime=strftime(strptime(EXdata[ptradetime],timeformat),format = "%Y-%m-%d %H:%M:%OS"),
                lastprice=round(as.numeric(EXdata[plastprice]),5),
                volume=round(as.numeric(EXdata[pvolume]),5),
                orderbook=list(
@@ -12,7 +12,7 @@
                    sellbook=data.frame(hands=round(as.numeric(EXdata[psellhands]),5),
                        price=round(as.numeric(EXdata[psellprice]),5))
                    ),
-               HMOS=paste("1970-01-01",strftime(strptime(TRADETIME,timeformat),format = "%H:%M:%OS")),
+               HMOS=paste("1970-01-01",strftime(strptime(EXdata[ptradetime],timeformat),format = "%H:%M:%OS")),
                presettleprice=round(as.numeric(EXdata[ppresettleprice]),5)
                )
         )

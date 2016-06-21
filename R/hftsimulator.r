@@ -25,7 +25,7 @@ options(stringsAsFactors = STRINGSASFACTORS)
     totallongholdings=numeric(),totalshortholdings=numeric(),
     cash=numeric(),stringsAsFactors=FALSE
 )
-.tradingstates$tc <- tc              #trade center?
+.tradingstates$tc <- logical(1)              #trade center?
 ## target holding of trade center
 .tradingstates$th <- data.frame(instrumentid=character(),longholding=numeric(),
                                shortholding=numeric(),stringsAsFactors = FALSE)
@@ -49,7 +49,7 @@ options(stringsAsFactors = STRINGSASFACTORS)
     stringsAsFactors=FALSE)
 
 ## save seprated traded order history when septraded=TRUE
-.tradingstates$septraded <- septraded
+.tradingstates$septraded <- logical(1)
 .tradingstates$longopen <- data.frame(
     instrumentid=character(),orderid=character(),
     action=character(),
@@ -65,8 +65,8 @@ options(stringsAsFactors = STRINGSASFACTORS)
 .tradingstates$currenttradetime <- character()
 
 ## interdaily or not
-.tradingstates$interdaily <- interdaily
-.tradingstates$startoftheday <- logical()
+.tradingstates$interdaily <- logical(1)
+.tradingstates$startoftheday <- logical(1)
 
 ## verbose
 .tradingstates$verbosepriors <- NULL
@@ -74,23 +74,22 @@ options(stringsAsFactors = STRINGSASFACTORS)
 ## trade center invoke tag and sleep recorder
 .tradingstates$justchanged <- NULL
 .tradingstates$lastchange <- NULL
-.tradingstates$Sleep <- Sleep
+.tradingstates$Sleep <- numeric(1)
 
 ## instrument-closeprofit tracker
-.tradingstates$closed <- closed
+.tradingstates$closed <- logical(1)
 .tradingstates$closedtracker <- data.frame(instrumentid=character(),cash=numeric(),stringsAsFactors=FALSE)
 
 ## track unclosed orders
-.tradingstates$unclosed <- unclosed
+.tradingstates$unclosed <- logical(1)
 .tradingstates$unclosedlong <- .tradingstates$longopen
 .tradingstates$unclosedshort <- .tradingstates$longopen
-.tradingstates$unclosedsettleprice <- logical()
+.tradingstates$unclosedsettleprice <- logical(1)
 
 
 .INSTRUMENT  <- new.env(hash = TRUE)
 
 .INSTRUMENT$instrumentid <- list()
-
 
 .INSTRUMENT$pbuyhands <- list()
 .INSTRUMENT$pbuyprice <- list()
@@ -1080,25 +1079,64 @@ BSO <- function(orderbook,preorderbook,bsi){
 }
 
 
+dataformat <- list(pbuyhands = seq(from = 32,by = 1,length.out = 5),
+pbuyprice = seq(from = 22,by = 1,length.out = 5),
+psellhands = seq(from = 37,by = 1,length.out = 5),
+psellprice = seq(from = 27,by = 1,length.out = 5),
+ptradetime = 2,plastprice = 4,pvolume = 12,
+ppresettleprice=8)
 
+if(is.null(dataformat[["fee"]])){
+    fee=c(long=0,short=0,closetoday=0,closepreday=0)
+}
+if(is.null(dataformat[["closeprior"]])){
+    closeprior = "today"
+}
+if(is.null(dataformat[["timeformat"]])){
+    timeformat = "%Y-%m-%d %H:%M:%OS"
+}
+if(is.null(dataformat[["endoftheday"]])){
+    endoftheday="23:59:59.999"
+}
+if(is.null(dataformat[["multiplier"]])){
+    multiplier=1
+}
 
-
-
-
-
-HFTsimulator <- function(stg,
+## datalist must be a list of data.frame(s) or a data.frame.
+## formatlist is either a list of data format specifycation or a list of lists of specifications.
+## instrumentids: instrument identifier
+HFTsimulator <- function(stg,instrumentids,datalist,formatlist,
                          tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE,
                          instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,ppresettleprice,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000){
+    ## strategy function check
     if(!is(stg,"function")){
         stop(substitute(stg),"is not a function!")
     }
+    ## data check
+    if(is(datalist,list)){
+        if(length(instrumentids)!=length(datalist)) stop("length of instrumentids is not equal to length of datalist!")
+    }
+    ## data format check
+    if(any(!c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume","ppresettleprice")%in%names(formatlist)) &
+       any(!c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume","ppresettleprice")%in%names(formatlist[[1]]))){
+        stop("missing format specifications in ",substitute(formatlist))
+    }
+
+
     ## garbage picker
     garbagepicker <- eval(parse(text = deparse(stg)))
 
     ## environment settings
     options(digits.secs=DIGITSSECS)
     options(stringsAsFactors = STRINGSASFACTORS)
-    
 
+    ## initialize simulator state
+    .tradingstates$tc <- tc
+    .tradingstates$septraded <- septraded
+    .tradingstates$interdaily <- interdaily
+    .tradingstates$Sleep <- Sleep
+    .tradingstates$closed <- closed
+    .tradingstates$unclosed <- unclosed
+    ## instrument instruments' states
     
 }
