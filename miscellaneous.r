@@ -371,10 +371,14 @@ checklimit <- function(instrumentdata,orderid){
     }
 
     ## 1.plot current order change
-    d$price <- as.character(d$price)
-    d$x <- as.factor(strftime(d$tradetime,format = "%H:%M:%OS"))
-    d$y <- ddply(d,.(tradetime),function(x){data.frame(y=cumsum(c(0,x$hands[-nrow(x)]))+ceiling(x$hands/2))})$y #generate label positions
-    p1 <- ggplot(d)+geom_bar(aes(x=x,y=hands,fill=price),position = "stack",stat = "identity")+scale_y_discrete(breaks=NULL)+scale_fill_grey()+geom_text(aes(x=x,y=y,label=paste(price,hands,sep = " : ")),size=3)+xlab(NULL)+theme(panel.background=element_blank())
+    if(nrow(d)>0){
+        d$price <- as.character(d$price)
+        d$x <- as.factor(strftime(d$tradetime,format = "%H:%M:%OS"))
+        d$y <- ddply(d,.(tradetime),function(x){data.frame(y=cumsum(c(0,x$hands[-nrow(x)]))+ceiling(x$hands/2))})$y #generate label positions
+        p1 <- ggplot(d)+geom_bar(aes(x=x,y=hands,fill=price),position = "stack",stat = "identity")+scale_y_discrete(breaks=NULL)+scale_fill_grey()+geom_text(aes(x=x,y=y,label=paste(price,hands,sep = " : ")),size=3)+xlab(NULL)+theme(panel.background=element_blank())
+    }else{
+        print("no prior orders.")
+    }
     ## 2.plot corresponding orderbook change
     currentidx <- currentdata$tradetime%in%names(currentverbose)
     currentbook <- currentdata[currentidx,]
@@ -449,7 +453,9 @@ checklimit <- function(instrumentdata,orderid){
     print(p3,vp=vplayout(1:4,1:10))
     print(p4,vp=vplayout(5:6,1:10))
     print(p2,vp=vplayout(7:8,1:10))
-    print(p1,vp=vplayout(9:10,1:10))
+    if(nrow(d)>0){
+        print(p1,vp=vplayout(9:10,1:10))
+    }
 }
 
 ## ## 1. agents: output target holdings' signal

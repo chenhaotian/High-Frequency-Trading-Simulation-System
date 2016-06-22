@@ -1,20 +1,15 @@
 Package: HFT
 Title: High-Frequency Trading Simulation System
-Description: A high-frequency trading simulation system in R
+Description: A high-frequency trading simulation system in R.
 Author: Chen Haotian
 Version: 0.1
 Maintainer: Chen Haotian<chen-haotian@qq.com>
 Depends:
-    R (>= 3.0.1),
-    gtools,
-    plyr,
-    ggplot2,
-    grid,
-    operator.tools,
-    zoo
+    R (>= 3.0.1)
 License: GPL-3
 LazyData: true
 Date: 2015-10-26
 Collate:
+    'utils.r'
     'hftsimulator.r'
-
+RoxygenNote: 5.0.1

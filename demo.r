@@ -1,4 +1,3 @@
-
 source("R/utils.r")
 source("R/hftsimulator.r")
 load("~/R/Instruments/Qutke/dataforDM")
@@ -113,10 +112,12 @@ TF1603  <- function(OMAX){
     
 }
 
-HFTsimulator(stg = TF1603,OMAX=2,instrumentids = instrumentids,datalist = datalist,formatlist = formatlist,IMLAZY = TRUE)
+HFTsimulator(stg = TF1603,OMAX=2,instrumentids = instrumentids,datalist = datalist,formatlist = formatlist,IMLAZY = TRUE,verboselimitpriors = FALSE)
 
 source("miscellaneous.r")
 
 res <- tradesummary(datalist,"TF1603",endtime = "11:30:00.000")
 
 checklimit(instrumentdata = datalist,orderid = res$traded$orderid[81])
+
+checklimit(instrumentdata = datalist,orderid = res$traded$orderid[20])

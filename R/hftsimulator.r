@@ -1,7 +1,5 @@
-
 options(digits.secs=3)
 options(stringsAsFactors = FALSE)
-
 
 .tradingstates <- new.env(hash = TRUE)
 .tradingstates$orders <- data.frame(
@@ -84,7 +82,6 @@ options(stringsAsFactors = FALSE)
 .tradingstates$unclosed <- logical(1)
 .tradingstates$unclosedlong <- .tradingstates$longopen
 .tradingstates$unclosedshort <- .tradingstates$longopen
-.tradingstates$unclosedsettleprice <- logical(1)
 
 
 .INSTRUMENT  <- new.env(hash = TRUE)
@@ -208,6 +205,32 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         stop("illegal parameter values!")
     }
 
+    .sucker <- function(LONGHOLDINGS,SHORTHOLDINGS){
+        vol <- abs(hands)
+        if(direction==-1){
+            ## close long, hold>0, untrade<0
+            hold <- sum(.tradingstates$capital[[LONGHOLDINGS]][.tradingstates$capital$instrumentid==instrumentid])
+            nethold <- hold+untrade
+            if( (hold==0) | direction==sign(nethold) |
+                vol>abs(hold) | vol>abs(nethold) |
+                (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
+                .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
+                stop("submission failed, status code: 6, orderid: ",orderid)
+            }
+        }
+        else{
+            ## close short, hold<0, untrade>0
+            hold <- sum(.tradingstates$capital[[SHORTHOLDINGS]][.tradingstates$capital$instrumentid==instrumentid])
+            nethold <- hold+untrade
+            if( (hold==0) | direction==sign(nethold) |
+                vol>abs(hold) | vol>abs(nethold) |
+                (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
+                .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
+                stop("submission failed, status code: 6, orderid: ",orderid)
+            }
+        }
+    }
+    
     ## special requirements when action!=cancel
     ## get most recent orderbook
     mostrecentorderbook <- .INSTRUMENT$orderbook[[instrumentid]]
@@ -240,7 +263,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
     else if(action=="close"){
         ## untrade closes
         untrade <- sum(currentinstrument$hands[currentinstrument$direction==direction&currentinstrument$action%in%c("close","closepreday","closetoday")])*direction #untrade(long)<0, untrade(short)>0
-        .sucker(totallongholdings,totalshortholdings)
+        .sucker("totallongholdings","totalshortholdings")
 
         orders <- rbind(orders,data.frame(instrumentid=instrumentid,orderid=orderid,direction=direction,price=price,hands=hands,action=action,initialhands=hands,timeoutlist=timeoutlist,timeoutchase=timeoutchase,timeoutsleep=timeoutsleep,chaselist=chaselist,chasesleep=chasesleep,submitstart=tradetime,stringsAsFactors=FALSE))
         
@@ -254,7 +277,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
     else if(action=="closetoday"){
         ## untrade closes
         untrade <- sum(currentinstrument$hands[currentinstrument$direction==direction&currentinstrument$action%in%c("close","closetoday")])*direction
-        .sucker(longholdingstoday,shortholdingstoday)
+        .sucker("longholdingstoday","shortholdingstoday")
 
         orders <- rbind(orders,data.frame(instrumentid=instrumentid,orderid=orderid,direction=direction,price=price,hands=hands,action=action,initialhands=hands,timeoutlist=timeoutlist,timeoutchase=timeoutchase,timeoutsleep=timeoutsleep,chaselist=chaselist,chasesleep=chasesleep,submitstart=tradetime,stringsAsFactors=FALSE))
         if(price>0)
@@ -268,7 +291,7 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
         ## closepreday
         ## untrade closes
         untrade <- sum(currentinstrument$hands[currentinstrument$direction==direction&currentinstrument$action%in%c("close","closepreday")])*direction
-        .sucker(longholdingspreday,shortholdingspreday)
+        .sucker("longholdingspreday","shortholdingspreday")
 
         orders <- rbind(orders,data.frame(instrumentid=instrumentid,orderid=orderid,direction=direction,price=price,hands=hands,action=action,initialhands=hands,timeoutlist=timeoutlist,timeoutchase=timeoutchase,timeoutsleep=timeoutsleep,chaselist=chaselist,chasesleep=chasesleep,submitstart=tradetime,stringsAsFactors=FALSE))
         if(price>0)
@@ -1123,13 +1146,66 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
 
     cat("Initializing simulator states...")
 
+    .CFEupdate <- function(DATA,INSTRUMENTID){
+        DATA <- unlist(strsplit(paste(DATA,collapse = ","),split = ","))
+        ## extract information
+        tradetime <<- .extractinfo("tradetime",DATA,ptradetime=.INSTRUMENT$ptradetime[[INSTRUMENTID]],timeformat=.INSTRUMENT$timeformat[[INSTRUMENTID]])
+        ## keep tracking most recent tradetime IMPORTANT
+        .tradingstates$currenttradetime <- tradetime
+        ## interdaily trading-----------------------------------
+        if(.tradingstates$interdaily){
+            ## reset instrument trading start indicator
+            .tradingstates$startoftheday[INSTRUMENTID] <- FALSE
+            HMOS <- .extractinfo("HMOS",DATA,ptradetime=.INSTRUMENT$ptradetime[[INSTRUMENTID]],timeformat=.INSTRUMENT$timeformat[[INSTRUMENTID]])
+            .INSTRUMENT$current[[INSTRUMENTID]] <- ifelse(HMOS<=.INSTRUMENT$endoftheday[[INSTRUMENTID]],as.numeric(difftime(HMOS,"1970-01-01 00:00:00.000",units = "secs")+.INSTRUMENT$tomidnight[[INSTRUMENTID]]),as.numeric(difftime(HMOS,.INSTRUMENT$endoftheday[[INSTRUMENTID]],units = "secs")))
+            ## new day condition
+            if(.INSTRUMENT$current[[INSTRUMENTID]]<.INSTRUMENT$pre[[INSTRUMENTID]]){
+                ## instrument trading start indicator
+                .tradingstates$startoftheday[INSTRUMENTID] <- TRUE
+                ## reset total volume and orderbook
+                .INSTRUMENT$pretotalvolume <- .INSTRUMENT$pretotalvolume[names(.INSTRUMENT$pretotalvolume)!=INSTRUMENTID]
+                .INSTRUMENT$preorderbook <- .INSTRUMENT$preorderbook[names(.INSTRUMENT$preorderbook)!=INSTRUMENTID]
+                IDX <- .tradingstates$capital$instrumentid==INSTRUMENTID
+                ## move holdings to preholdins
+                .tradingstates$capital[IDX,c("longholdingspreday","shortholdingspreday")] <- .tradingstates$capital[IDX,c("longholdingspreday","shortholdingspreday")]+.tradingstates$capital[IDX,c("longholdingstoday","shortholdingstoday")]
+                .tradingstates$capital[IDX,c("longholdingstoday","shortholdingstoday")] <- c(0,0)
+                ## .INSTRUMENT$newday[[INSTRUMENTID]] <- FALSE
+            }
+            .INSTRUMENT$pre[[INSTRUMENTID]] <- .INSTRUMENT$current[[INSTRUMENTID]]
+        }
+        ## interdaily trading-----------------------------------
+        lastprice <<- .extractinfo("lastprice",DATA,plastprice=.INSTRUMENT$plastprice[[INSTRUMENTID]])
+        .INSTRUMENT$lastprice[[INSTRUMENTID]] <- lastprice
+        totalvolume <<- .extractinfo("volume",DATA,pvolume=.INSTRUMENT$pvolume[[INSTRUMENTID]])
+        if(! INSTRUMENTID%in%names(.INSTRUMENT$pretotalvolume) ){
+            .INSTRUMENT$pretotalvolume[[INSTRUMENTID]] <- totalvolume
+        }
+        volume <<- totalvolume-.INSTRUMENT$pretotalvolume[[INSTRUMENTID]]
+        orderbook <<- .extractinfo("orderbook",DATA,pbuyhands=.INSTRUMENT$pbuyhands[[INSTRUMENTID]],pbuyprice=.INSTRUMENT$pbuyprice[[INSTRUMENTID]],psellhands=.INSTRUMENT$psellhands[[INSTRUMENTID]],psellprice=.INSTRUMENT$psellprice[[INSTRUMENTID]])
+        if(! INSTRUMENTID%in%names(.INSTRUMENT$preorderbook) ){
+            .INSTRUMENT$preorderbook[[INSTRUMENTID]] <- orderbook
+        }
+        .INSTRUMENT$orderbook[[INSTRUMENTID]] <- orderbook
+        preorderbook <<- .INSTRUMENT$preorderbook[[INSTRUMENTID]] #might be useful
+                
+        ## update states
+        .updateinstrument(instrumentid=INSTRUMENTID,lastprice,volume,orderbook,.INSTRUMENT$preorderbook[[INSTRUMENTID]],.INSTRUMENT$fee[[INSTRUMENTID]],.INSTRUMENT$closeprior[[INSTRUMENTID]],multiplier=.INSTRUMENT$multiplier[[INSTRUMENTID]])
+        ## save as previous values
+        .INSTRUMENT$pretotalvolume[[INSTRUMENTID]] <- totalvolume
+        .INSTRUMENT$preorderbook[[INSTRUMENTID]] <- orderbook
+        ## some automatic functions
+        .timeoutdetector()
+        .orderchaser()
+        .tradecenter(INSTRUMENTID)
+    }
+    
     ## garbage picker
     garbagepicker <- eval(parse(text = deparse(stg)))
-
+    
     ## environment settings
     options(digits.secs=DIGITSSECS)
     options(stringsAsFactors = STRINGSASFACTORS)
-
+    
     ## initialize simulator state
     .tradingstates$tc <- tc             #trade-center
     .tradingstates$septraded <- septraded
@@ -1197,7 +1273,6 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     .tradingstates$closedtracker <- data.frame(instrumentid=character(),cash=numeric(),stringsAsFactors=FALSE) #closed
     .tradingstates$unclosedlong <- .tradingstates$longopen
     .tradingstates$unclosedshort <- .tradingstates$longopen
-    .tradingstates$unclosedsettleprice <- logical()
 
 
     ## <<<<<<<<<<<<<<< TO DO >>>>>>>>>>>>>>>
@@ -1260,6 +1335,13 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     if(progressbar){
         pb <- txtProgressBar(min = 1,max = nrow(datalist),style = 3)
     }
+    ## initialize tmp vars
+    tradetime <- character(1)
+    lastprice <- numeric(1)
+    totalvolume <- numeric(1)
+    volume <- numeric(1)
+    orderbook <- list()
+    preorderbook <- list()
     ## simulation
     for(i in 1:nrow(datalist)){
         .CFEupdate(DATA = datalist[i,],INSTRUMENTID = datalist[i,"instrumentid"])

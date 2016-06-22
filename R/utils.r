@@ -50,43 +50,44 @@
     ff
 }
 
-.capchange <- .DEFMACRO(TODAY,TOTAL,HANDS,COMMISSION,expr={
-    ## cashchange <- (-1)*direction*HANDS*tradeprice-HANDS*tradeprice*COMMISSION
-    idx <- .tradingstates$capital$instrumentid==instrumentid
-    ## initialize new instrument
-    if(!any(idx)){
-        .tradingstates$capital <- rbind(.tradingstates$capital,data.frame(instrumentid=instrumentid,longholdingstoday=0,shortholdingstoday=0,longholdingspreday=0,shortholdingspreday=0,totallongholdings=0,totalshortholdings=0,cash=0,stringsAsFactors=FALSE))
-        idx <- nrow(.tradingstates$capital)
-    }
-    handschange <- HANDS*direction
-    trans <- handschange*tradeprice*(-1)*multiplier
-    cost <- cost + HANDS*tradeprice*COMMISSION*multiplier
-    .tradingstates$capital$cash[idx] <- .tradingstates$capital$cash[idx]+trans-cost
-    .tradingstates$capital$TODAY[idx] <- .tradingstates$capital$TODAY[idx]+handschange
-    .tradingstates$capital$TOTAL[idx] <- .tradingstates$capital$TOTAL[idx]+handschange
-    ## capital calculation needs prices of many different instruments......
-})
-
 .updatecapital <- function(instrumentid,direction,hands,action,tradeprice,fee,closeprior="today",multiplier=10000){
     
     ## cost of current transaction
     cost <- 0
     idx <- .tradingstates$capital$instrumentid==instrumentid
+
+    .capchange <- function(TODAY,TOTAL,HANDS,COMMISSION){
+        ## cashchange <- (-1)*direction*HANDS*tradeprice-HANDS*tradeprice*COMMISSION
+        ## idx <- .tradingstates$capital$instrumentid==instrumentid
+        ## initialize new instrument
+        if(!any(idx)){
+            .tradingstates$capital <- rbind(.tradingstates$capital,data.frame(instrumentid=instrumentid,longholdingstoday=0,shortholdingstoday=0,longholdingspreday=0,shortholdingspreday=0,totallongholdings=0,totalshortholdings=0,cash=0,stringsAsFactors=FALSE))
+            idx <- nrow(.tradingstates$capital)
+        }
+        handschange <- HANDS*direction
+        trans <- handschange*tradeprice*(-1)*multiplier
+        cost <- cost + HANDS*tradeprice*COMMISSION*multiplier
+        .tradingstates$capital$cash[idx] <- .tradingstates$capital$cash[idx]+trans-cost
+        .tradingstates$capital[[TODAY]][idx] <- .tradingstates$capital[[TODAY]][idx]+handschange
+        .tradingstates$capital[[TOTAL]][idx] <- .tradingstates$capital[[TOTAL]][idx]+handschange
+        ## capital calculation needs prices of many different instruments......
+    }
+    
     if(action=="close"){
         if(closeprior=="today"){
             if(direction==-1){
                 ## close long, direction==-1!!!!!!!!!
                 ## longholdings>=0
                 if(hands<=.tradingstates$capital$longholdingstoday[idx]){
-                    .capchange(longholdingstoday,totallongholdings,
+                    .capchange("longholdingstoday","totallongholdings",
                               hands,fee["closetoday"])
                 }
                 else{
                     close1 <- .tradingstates$capital$longholdingstoday[idx]
-                    .capchange(longholdingstoday,totallongholdings,
+                    .capchange("longholdingstoday","totallongholdings",
                               close1,fee["closetoday"])
                     close2 <- hands-close1
-                    .capchange(longholdingspreday,totallongholdings,
+                    .capchange("longholdingspreday","totallongholdings",
                               close2,fee["closepreday"])
                 }
             }
@@ -94,15 +95,15 @@
                 ## close short, direction==1!!!!!!!!!
                 ## shortholdings<=0!!!!!!
                 if(hands<=(-.tradingstates$capital$shortholdingstoday[idx])){
-                    .capchange(shortholdingstoday,totalshortholdings,
+                    .capchange("shortholdingstoday","totalshortholdings",
                               hands,fee["closetoday"])
                 }
                 else{
                     close1 <- (-.tradingstates$capital$shortholdingstoday[idx])
-                    .capchange(shortholdingstoday,totalshortholdings,
+                    .capchange("shortholdingstoday","totalshortholdings",
                               close1,fee["closetoday"])
                     close2 <- hands-close1
-                    .capchange(shortholdingspreday,totalshortholdings,
+                    .capchange("shortholdingspreday","totalshortholdings",
                               close2,fee["closepreday"])
                 }
             }
@@ -113,15 +114,15 @@
                 ## close long, direction==-1!!!!!!!!!
                 ## longholdings>=0
                 if(hands<=.tradingstates$capital$longholdingspreday[idx]){
-                    .capchange(longholdingspreday,totallongholdings,
+                    .capchange("longholdingspreday","totallongholdings",
                               hands,fee["closepreday"])
                 }
                 else{
                     close1 <- .tradingstates$capital$longholdingspreday[idx]
-                    .capchange(longholdingspreday,totallongholdings,
+                    .capchange("longholdingspreday","totallongholdings",
                               close1,fee["closepreday"])
                     close2 <- hands-close1
-                    .capchange(longholdingstoday,totallongholdings,
+                    .capchange("longholdingstoday","totallongholdings",
                               close2,fee["closetoday"])
                 }
             }
@@ -129,15 +130,15 @@
                 ## close short, direction==1!!!!!!!!!
                 ## shortholdings<=0!!!!!!
                 if(hands<=(-.tradingstates$capital$shortholdingspreday[idx])){
-                    .capchange(shortholdingspreday,totalshortholdings,
+                    .capchange("shortholdingspreday","totalshortholdings",
                               hands,fee["closepreday"])
                 }
                 else{
                     close1 <- (-.tradingstates$capital$shortholdingspreday[idx])
-                    .capchange(shortholdingspreday,totalshortholdings,
+                    .capchange("shortholdingspreday","totalshortholdings",
                               close1,fee["closepreday"])
                     close2 <- hands-close1
-                    .capchange(shortholdingstoday,totalshortholdings,
+                    .capchange("shortholdingstoday","totalshortholdings",
                               close2,fee["closetoday"])
                 }
             }
@@ -145,23 +146,23 @@
     }
     else if(action=="open"){
         if(direction==1){
-            .capchange(longholdingstoday,totallongholdings,
+            .capchange("longholdingstoday","totallongholdings",
                       hands,fee["long"])
         }
         else{
-            .capchange(shortholdingstoday,totalshortholdings,
+            .capchange("shortholdingstoday","totalshortholdings",
                       hands,fee["short"])
         }
     }
     else if(action=="closetoday"){
         if(direction==-1){
             ## close long, direction==-1!!!!!!!!!
-            .capchange(longholdingstoday,totallongholdings,
+            .capchange("longholdingstoday","totallongholdings",
                       hands,fee["closetoday"])
         }
         else{
             ## close short, direction==1!!!!!!!!!
-            .capchange(shortholdingstoday,totalshortholdings,
+            .capchange("shortholdingstoday","totalshortholdings",
                       hands,fee["closetoday"])
         }
     }
@@ -169,12 +170,12 @@
         ## action=="closepreday"
         if(direction==-1){
             ## close long, direction==-1!!!!!!!!!
-            .capchange(longholdingspreday,totallongholdings,
+            .capchange("longholdingspreday","totallongholdings",
                       hands,fee["closepreday"])
         }
         else{
             ## close short, direction==1!!!!!!!!!
-            .capchange(shortholdingspreday,totalshortholdings,
+            .capchange("shortholdingspreday","totalshortholdings",
                       hands,fee["closepreday"])
         }
     }
@@ -650,31 +651,7 @@
     return()
 }
 
-.sucker <- .DEFMACRO(LONGHOLDINGS,SHORTHOLDINGS,expr = {
-    vol <- abs(hands)
-    if(direction==-1){
-        ## close long, hold>0, untrade<0
-        hold <- sum(.tradingstates$capital$LONGHOLDINGS[.tradingstates$capital$instrumentid==instrumentid])
-        nethold <- hold+untrade
-        if( (hold==0) | direction==sign(nethold) |
-           vol>abs(hold) | vol>abs(nethold) |
-           (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
-            .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
-            stop(6)
-        }
-    }
-    else{
-        ## close short, hold<0, untrade>0
-        hold <- sum(.tradingstates$capital$SHORTHOLDINGS[.tradingstates$capital$instrumentid==instrumentid])
-        nethold <- hold+untrade
-        if( (hold==0) | direction==sign(nethold) |
-           vol>abs(hold) | vol>abs(nethold) |
-           (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
-            .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
-            stop(6)
-        }
-    }
-})
+
 
 ## detect timeout orders, must be executed before .orderchaser
 .timeoutdetector <- function(){
@@ -744,13 +721,6 @@
 }
 
 .lazyfunctions <- function(){
-    ## setOperators("%c%","%&%","%!%","%==%","%$%")
-    ## setOperators("%c%","%$%")
-    ## concatenate stings
-    `%c%` <- function(x,y){
-        return(paste(as.character(x),as.character(y),sep=""))
-    }
-    assign("%c%",value = `%c%`,envir = .GlobalEnv)
     ## logicals
     `&` <- function(x,y){
         if(is.expression(x)){
@@ -820,7 +790,7 @@
     assign("!",value = `!`,envir = .GlobalEnv)
     
     ANY <- function(...,na.rm=FALSE){
-        base:::any(vapply(list(...),function(par){
+        base::any(vapply(list(...),function(par){
             if(is.expression(par)){
                 par <- eval(par)
                 if(!is.logical(par))
@@ -837,7 +807,7 @@
     }
     assign("ANY",value = ANY,envir = .GlobalEnv)
     ALL <- function(...,na.rm=FALSE){
-        base:::all(vapply(list(...),function(par){
+        base::all(vapply(list(...),function(par){
             if(is.expression(par)){
                 par <- eval(par)
                 if(!is.logical(par))
@@ -921,6 +891,10 @@
     }
     else if(type=="specific"){
         prefix <- instrumentid
+    }
+
+    `%c%` <- function(x,y){
+        return(paste(as.character(x),as.character(y),sep=""))
     }
     
     ## orders
@@ -1105,73 +1079,45 @@
     .tradingstates$verbosepriors[[.tradingstates$currenttradetime]] <- .tradingstates$limitprior
 }
 
-## extract tradetime, lastprice, orderbook, preorderbook and volume from current data flow. update queuing orders and capital state.
-.CFEupdate <- .DEFMACRO(DATA,INSTRUMENTID,expr = {
-    DATA <- unlist(strsplit(paste(DATA,collapse = ","),split = ","))
-    ## extract information
-    tradetime <- .extractinfo("tradetime",DATA,ptradetime=.INSTRUMENT$ptradetime[[INSTRUMENTID]],timeformat=.INSTRUMENT$timeformat[[INSTRUMENTID]])
-    ## keep tracking most recent tradetime IMPORTANT
-    .tradingstates$currenttradetime <- tradetime
-    ## interdaily trading-----------------------------------
-    if(.tradingstates$interdaily){
-        ## reset instrument trading start indicator
-        .tradingstates$startoftheday[INSTRUMENTID] <- FALSE
-        HMOS <- .extractinfo("HMOS",DATA,ptradetime=.INSTRUMENT$ptradetime[[INSTRUMENTID]],timeformat=.INSTRUMENT$timeformat[[INSTRUMENTID]])
-        .INSTRUMENT$current[[INSTRUMENTID]] <- ifelse(HMOS<=.INSTRUMENT$endoftheday[[INSTRUMENTID]],as.numeric(difftime(HMOS,"1970-01-01 00:00:00.000",units = "secs")+.INSTRUMENT$tomidnight[[INSTRUMENTID]]),as.numeric(difftime(HMOS,.INSTRUMENT$endoftheday[[INSTRUMENTID]],units = "secs")))
-        ## new day condition
-        if(.INSTRUMENT$current[[INSTRUMENTID]]<.INSTRUMENT$pre[[INSTRUMENTID]]){
-            ## instrument trading start indicator
-            .tradingstates$startoftheday[INSTRUMENTID] <- TRUE
-            ## reset total volume and orderbook
-            .INSTRUMENT$pretotalvolume <- .INSTRUMENT$pretotalvolume[names(.INSTRUMENT$pretotalvolume)!=INSTRUMENTID]
-            .INSTRUMENT$preorderbook <- .INSTRUMENT$preorderbook[names(.INSTRUMENT$preorderbook)!=INSTRUMENTID]
-            IDX <- .tradingstates$capital$instrumentid==INSTRUMENTID
-            ## move holdings to preholdins
-            .tradingstates$capital[IDX,c("longholdingspreday","shortholdingspreday")] <- .tradingstates$capital[IDX,c("longholdingspreday","shortholdingspreday")]+.tradingstates$capital[IDX,c("longholdingstoday","shortholdingstoday")]
-            .tradingstates$capital[IDX,c("longholdingstoday","shortholdingstoday")] <- c(0,0)
-            ## .INSTRUMENT$newday[[INSTRUMENTID]] <- FALSE
-        }
-        .INSTRUMENT$pre[[INSTRUMENTID]] <- .INSTRUMENT$current[[INSTRUMENTID]]
-    }
-    ## interdaily trading-----------------------------------
-    lastprice <- .extractinfo("lastprice",DATA,plastprice=.INSTRUMENT$plastprice[[INSTRUMENTID]])
-    .INSTRUMENT$lastprice[[INSTRUMENTID]] <- lastprice
-    totalvolume <- .extractinfo("volume",DATA,pvolume=.INSTRUMENT$pvolume[[INSTRUMENTID]])
-    if(! INSTRUMENTID%in%names(.INSTRUMENT$pretotalvolume) ){
-        .INSTRUMENT$pretotalvolume[[INSTRUMENTID]] <- totalvolume
-    }
-    volume <- totalvolume-.INSTRUMENT$pretotalvolume[[INSTRUMENTID]]
-    orderbook <- .extractinfo("orderbook",DATA,pbuyhands=.INSTRUMENT$pbuyhands[[INSTRUMENTID]],pbuyprice=.INSTRUMENT$pbuyprice[[INSTRUMENTID]],psellhands=.INSTRUMENT$psellhands[[INSTRUMENTID]],psellprice=.INSTRUMENT$psellprice[[INSTRUMENTID]])
-    if(! INSTRUMENTID%in%names(.INSTRUMENT$preorderbook) ){
-        .INSTRUMENT$preorderbook[[INSTRUMENTID]] <- orderbook
-    }
-    .INSTRUMENT$orderbook[[INSTRUMENTID]] <- orderbook
-    preorderbook <- .INSTRUMENT$preorderbook[[INSTRUMENTID]] #might be useful
-    
-    ## fill settle price for pre unclosed!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    if(any(.tradingstates$unclosedsettleprice)){
-        if(.tradingstates$unclosedsettleprice[INSTRUMENTID]){
-            presettleprice <- .extractinfo("presettleprice",DATA,ppresettleprice = .INSTRUMENT$ppresettleprice[[INSTRUMENTID]])
-            idxlong <- .tradingstates$unclosedlong$instrumentid==INSTRUMENTID&.tradingstates$unclosedlong$tradeprice==0
-            if(any(idxlong)){
-                .tradingstates$unclosedlong$tradeprice[idxlong] <- presettleprice
-            }
-            idxshort <- .tradingstates$unclosedshort$instrumentid==INSTRUMENTID&.tradingstates$unclosedshort$tradeprice==0
-            if(any(idxshort)){
-                .tradingstates$unclosedshort$tradeprice[idxshort] <- presettleprice
-            }
-            .tradingstates$unclosedsettleprice[INSTRUMENTID] <- FALSE
-        }
-    }
-    ## fill settle price for pre unclosed!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
-    ## update states
-    .updateinstrument(instrumentid=INSTRUMENTID,lastprice,volume,orderbook,.INSTRUMENT$preorderbook[[INSTRUMENTID]],.INSTRUMENT$fee[[INSTRUMENTID]],.INSTRUMENT$closeprior[[INSTRUMENTID]],multiplier=.INSTRUMENT$multiplier[[INSTRUMENTID]])
-    ## save as previous values
-    .INSTRUMENT$pretotalvolume[[INSTRUMENTID]] <- totalvolume
-    .INSTRUMENT$preorderbook[[INSTRUMENTID]] <- orderbook
-    ## some automatic functions
-    .timeoutdetector()
-    .orderchaser()
-    .tradecenter(INSTRUMENTID)
-})
+## .sucker <- .DEFMACRO(LONGHOLDINGS,SHORTHOLDINGS,expr = {
+##     vol <- abs(hands)
+##     if(direction==-1){
+##         ## close long, hold>0, untrade<0
+##         hold <- sum(.tradingstates$capital$LONGHOLDINGS[.tradingstates$capital$instrumentid==instrumentid])
+##         nethold <- hold+untrade
+##         if( (hold==0) | direction==sign(nethold) |
+##            vol>abs(hold) | vol>abs(nethold) |
+##            (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
+##             .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
+##             stop(6)
+##         }
+##     }
+##     else{
+##         ## close short, hold<0, untrade>0
+##         hold <- sum(.tradingstates$capital$SHORTHOLDINGS[.tradingstates$capital$instrumentid==instrumentid])
+##         nethold <- hold+untrade
+##         if( (hold==0) | direction==sign(nethold) |
+##            vol>abs(hold) | vol>abs(nethold) |
+##            (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
+##             .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
+##             stop(6)
+##         }
+##     }
+## })
+
+## .capchange <- .DEFMACRO(TODAY,TOTAL,HANDS,COMMISSION,expr={
+##     ## cashchange <- (-1)*direction*HANDS*tradeprice-HANDS*tradeprice*COMMISSION
+##     idx <- .tradingstates$capital$instrumentid==instrumentid
+##     ## initialize new instrument
+##     if(!any(idx)){
+##         .tradingstates$capital <- rbind(.tradingstates$capital,data.frame(instrumentid=instrumentid,longholdingstoday=0,shortholdingstoday=0,longholdingspreday=0,shortholdingspreday=0,totallongholdings=0,totalshortholdings=0,cash=0,stringsAsFactors=FALSE))
+##         idx <- nrow(.tradingstates$capital)
+##     }
+##     handschange <- HANDS*direction
+##     trans <- handschange*tradeprice*(-1)*multiplier
+##     cost <- cost + HANDS*tradeprice*COMMISSION*multiplier
+##     .tradingstates$capital$cash[idx] <- .tradingstates$capital$cash[idx]+trans-cost
+##     .tradingstates$capital$TODAY[idx] <- .tradingstates$capital$TODAY[idx]+handschange
+##     .tradingstates$capital$TOTAL[idx] <- .tradingstates$capital$TOTAL[idx]+handschange
+##     ## capital calculation needs prices of many different instruments......
+## })
