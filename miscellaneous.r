@@ -1,24 +1,24 @@
+library(grid)
+library(plyr)
+library(zoo)                            #na.locf
+library(ggplot2)
 
 ## analysing tools
 ## 1.specific functions------------------
 ## 1.1 manipulate 0.5s data
-##' datamanipulation
-##'
-##' datamanipulation
-##' @title datamanipulation
-##' @return formatted data
-##' @author Chen
-##'
+## datamanipulation
+##
+
 datamanipulation <- function(instrumentdata,instrumentid){
 
-    timeformat <- INSTRUMENT$timeformat[[instrumentid]]
-    plastprice <- INSTRUMENT$plastprice[[instrumentid]]
-    ptradetime <- INSTRUMENT$ptradetime[[instrumentid]]
-    pvolume <- INSTRUMENT$pvolume[[instrumentid]]
-    pbuyhands <- INSTRUMENT$pbuyhands[[instrumentid]]
-    pbuyprice <- INSTRUMENT$pbuyprice[[instrumentid]]
-    psellhands <- INSTRUMENT$psellhands[[instrumentid]]
-    psellprice <- INSTRUMENT$psellprice[[instrumentid]]
+    timeformat <- .INSTRUMENT$timeformat[[instrumentid]]
+    plastprice <- .INSTRUMENT$plastprice[[instrumentid]]
+    ptradetime <- .INSTRUMENT$ptradetime[[instrumentid]]
+    pvolume <- .INSTRUMENT$pvolume[[instrumentid]]
+    pbuyhands <- .INSTRUMENT$pbuyhands[[instrumentid]]
+    pbuyprice <- .INSTRUMENT$pbuyprice[[instrumentid]]
+    psellhands <- .INSTRUMENT$psellhands[[instrumentid]]
+    psellprice <- .INSTRUMENT$psellprice[[instrumentid]]
 
     ## basic information and time format
     instrumentdata <- instrumentdata[,c(ptradetime,plastprice,pvolume,pbuyprice,pbuyhands,psellprice,psellhands)]
@@ -36,17 +36,9 @@ datamanipulation <- function(instrumentdata,instrumentid){
     return(instrumentdata)
 }
 ## 1.2 calculate profit and loss
-##' pnl
-##'
-##' pnl
-##' @title pnl
-##' @return formatted data
-##' @importFrom zoo na.locf
-##' @author Chen
-##'
 pnl <- function(instrumentdata,capitalhistory,instrumentid){
 
-    multiplier <- INSTRUMENT$multiplier[[instrumentid]]
+    multiplier <- .INSTRUMENT$multiplier[[instrumentid]]
 
     ## close profit
     ## closeprofit <- unique(capitalhistory[capitalhistory$totallongholdings==0&capitalhistory$totalshortholdings==0,c("tradetime","cash")])
@@ -70,13 +62,7 @@ pnl <- function(instrumentdata,capitalhistory,instrumentid){
     
 }
 ## 1.3 max draw-down's range and value
-##' maxdrawdown
-##'
-##' maxdrawdown
-##' @title maxdrawdown
-##' @return a list containing draw-down range and value
-##' @author Chen
-##'
+## return a list containing draw-down range and value
 maxdrawdown <- function(pl,ddown){
     MAXdown <- min(ddown)
     minidx <- which.min(ddown)
@@ -84,26 +70,11 @@ maxdrawdown <- function(pl,ddown){
     return(list(starttag=maxidx,endtag=minidx,MAXdown=MAXdown))
 }
 ## 1.4 plot
-##' vplayout
-##'
-##' vplayout
-##' @title vplayout
-##' @return layout
-##' @importFrom grid viewport
-##' @author Chen
-##'
+## vplayout
 vplayout<-function( x, y ){
     viewport( layout.pos.row=x, layout.pos.col=y )
 }
 ## plot a two column's table, NAME and VALUE
-##' plottwocolumntable
-##'
-##' plottwocolumntable
-##' @title plottwocolumntable
-##' @return plot
-##' @importFrom ggplot2 ggplot geom_text theme_minimal theme
-##' @author Chen
-##'
 plottwocolumntable <- function(d,h1=-1,h2=1,v1=0,v2=0,s=3){
     names(d) <- c("NAME","VALUE")
     d <- rbind(data.frame(NAME=" ",VALUE=" "),d)
@@ -119,15 +90,6 @@ plottwocolumntable <- function(d,h1=-1,h2=1,v1=0,v2=0,s=3){
 ## ddinfo: draw down information; lossinfo: successive loss; wininfo: successive win
 ## os: order summary table(ALL traded and cancled); ss: successive profit and loss summary table; pds: profit loss and drawdown summary
 ## traded: all and partial traded orders
-##' summaryvpplot
-##'
-##' summaryvpplot
-##' @title summaryvpplot
-##' @return plot
-##' @importFrom ggplot2 ggplot geom_text theme_minimal theme geom_rect xlab ylab geom_line scale_y_continuous scale_x_datetime scale_x_discrete scale_color_identity scale_fill_identity geom_point
-##' @importFrom grid grid.newpage pushViewport grid.layout
-##' @author Chen
-##'
 summaryvpplot <- function(pd,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMMARY=TRUE,TRADED=TRUE){
     pd$tradetime <- as.POSIXct(pd$tradetime)
     dd$tradetime <- as.POSIXct(dd$tradetime)
@@ -240,7 +202,7 @@ summaryvpplot <- function(pd,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMM
 
     if(SUMMARY){
         ## order summary
-        p5 <- plottwocolumntable(os)
+        p5 <- plottwocolumntable(os,s=2.5)
         print(p5,vp=vplayout(1,4:5))
         ## successive change summary
         p6 <- plottwocolumntable(ss)
@@ -305,18 +267,7 @@ maxsuccessivechange <- function(sequence,direction,DIFF=TRUE,filtzeros=TRUE){
 ## data, capitalhistory, orderhistory, verbosepriors
 ## limitorders: plot which level's limit order price. for example limitorders=c(1,3,4)
 ## check the details of a specific limit order
-##' tradesummary
-##' 
-##' summary trade result
-##' 
-##' @title tradesummary
-##' @param instrumentdata data.frame, generated from datasource
-##' @param instrumentid character, specifying instrument id
-##' @param starttime character, must be of format "%H:%M:%S"
-##' @param endtime character, must be of format "%H:%M:%S"
-##' @return a named list and a plot
-##' @export
-##' @author Chen
+## summary trade result
 tradesummary <- function(instrumentdata,instrumentid="qtid",limitorders=NULL,starttime="09:15:00.000",endtime="15:15:00.000",SUMMARY=TRUE,TRADED=TRUE){
     
     ## data manipulation
@@ -387,18 +338,6 @@ tradesummary <- function(instrumentdata,instrumentid="qtid",limitorders=NULL,sta
     
 }
 ## check the details of a specific limit order
-##' checklimit
-##' 
-##' check limit order details
-##' 
-##' @title checklimit
-##' @param instrumentdata data.frame, generated from datasource
-##' @param orderid character, specifying id of the limit order
-##' @return plot
-##' @importFrom ggplot2 ggplot geom_text theme_minimal theme geom_rect xlab ylab geom_line scale_y_continuous scale_x_datetime scale_x_discrete scale_color_identity scale_fill_identity geom_point
-##' @importFrom grid grid.newpage pushViewport grid.layout
-##' @export
-##' @author Chen
 checklimit <- function(instrumentdata,orderid){
     currentorder <- head(.tradingstates$orderhistory[.tradingstates$orderhistory$orderid==orderid,],1)
     if(nrow(currentorder)==0){stop("can't find ",orderid)}
@@ -435,7 +374,7 @@ checklimit <- function(instrumentdata,orderid){
     d$price <- as.character(d$price)
     d$x <- as.factor(strftime(d$tradetime,format = "%H:%M:%OS"))
     d$y <- ddply(d,.(tradetime),function(x){data.frame(y=cumsum(c(0,x$hands[-nrow(x)]))+ceiling(x$hands/2))})$y #generate label positions
-    p1 <- ggplot(d)+geom_bar(aes(x=x,y=hands,fill=price),position = "stack",stat = "identity")+scale_y_discrete(breaks=NULL)+scale_fill_grey()+geom_text(aes(x=x,y=y,label=paste(price,hands,sep = " : ")),size=4)+xlab(NULL)+theme(panel.background=element_blank())
+    p1 <- ggplot(d)+geom_bar(aes(x=x,y=hands,fill=price),position = "stack",stat = "identity")+scale_y_discrete(breaks=NULL)+scale_fill_grey()+geom_text(aes(x=x,y=y,label=paste(price,hands,sep = " : ")),size=3)+xlab(NULL)+theme(panel.background=element_blank())
     ## 2.plot corresponding orderbook change
     currentidx <- currentdata$tradetime%in%names(currentverbose)
     currentbook <- currentdata[currentidx,]
@@ -453,7 +392,7 @@ checklimit <- function(instrumentdata,orderid){
     d2$x <- as.factor(strftime(d2$tradetime,format = "%H:%M:%OS"))
     d2$y <- rep((nrow(d2)/length(unique(d2$tradetime))):1,length(unique(d2$tradetime)))
     d2$label <- paste(d2$price,d2$hands,sep = " : ")
-    p2 <- ggplot(d2)+geom_text(aes(x=x,y=y,label=label),size=4)+theme(panel.background=element_blank(),panel.grid.major=element_line(linetype = 4,color = "gray40"))+xlab(NULL)+ylab(NULL)
+    p2 <- ggplot(d2)+geom_text(aes(x=x,y=y,label=label),size=2.5)+theme(panel.background=element_blank(),panel.grid.major=element_line(linetype = 4,color = "gray40"))+xlab(NULL)+ylab(NULL)
     
     ## 3. plot corresponding market data
     if(nrow(currentdata)>20){
@@ -475,7 +414,7 @@ checklimit <- function(instrumentdata,orderid){
     if(nrow(currentdata)>20){
         p3 <- p3+geom_line(aes(x=tradetime,y=lastprice))+scale_x_datetime(label=NULL)
     }else{       #break=prettyDate can't handle too small time period
-        p3 <- p3+geom_line(aes(x=tradetime,y=lastprice,group="1"))+scale_x_discrete(label="")
+        p3 <- p3+geom_line(aes(x=tradetime,y=lastprice,group="1"))+scale_x_discrete(label=NULL)
     }
 
     ## 3.5 order information
@@ -512,156 +451,6 @@ checklimit <- function(instrumentdata,orderid){
     print(p2,vp=vplayout(7:8,1:10))
     print(p1,vp=vplayout(9:10,1:10))
 }
-
-
-## Environment Tweaks-------------------
-
-## 
-
-##' resetma
-##' 
-##'  reset moving average environment
-##'
-##' @export
-##'
-resetma <- function(){
-    if(exists("movingenv",envir=globalenv())){
-        rm("movingenv",envir = globalenv())
-    }
-}
-
-##' updatemean
-##' 
-##'  upedate mean online
-##'
-##' @export
-##'
-updatemean <- function(xnew,xold,meanold,n){
-    meanold+(xnew-xold)/n
-}
-
-##' updatevar
-##' 
-##'  upedate var online
-##'
-##' @export
-##'
-updatevar <- function(xnew,xold,meanold,varold,n){
-    meannew <- updatemean(xnew,xold,meanold,n)
-    varnew <-  varold+(-(xold-meanold)^2+(n-1)*(meanold-meannew)^2-2*(meanold-meannew)*(xold-meanold)+(xnew-meannew)^2)/n
-    return(list(meannew=meannew,varnew=varnew))
-}
-
-##' moving average
-##' 
-##'  generate 2 series: original and mean
-##'
-##' @export
-##'
-movingaverage <- function(objectname,n,IMLAZY=TRUE,LAZYLAG=3){
-    if(!exists("movingenv",envir=globalenv())){
-        movingenv <- new.env(parent = globalenv())
-        movingenv$origin <- c(parent.frame()[[objectname]],rep(NA,n-1))
-        movingenv$ma <- rep(as.numeric(NA),n)
-        movingenv$ncum <- 0L
-        movingenv$N <- n
-        movingenv$tmp <- numeric(1)
-        assign("movingenv",movingenv,envir = globalenv())
-        ## generate expressions
-        if(IMLAZY){
-            if(!exists(".tradingstates",envir=globalenv())){
-                warning(".tradingstates is NULL, better initialize simulator before using this function")
-            }else{
-                if(.tradingstates$IMLAZY==FALSE){
-                    warning("part of LAZY functions are not generated! Please set IMLAZY=TRUE in initializestates().")
-                }
-            }
-            .furtherlazyfunctions()
-            for(i in 1:min(LAZYLAG,n)){
-                a <- parse(text = paste("movingenv$origin[movingenv$N-",i-1,"L]",sep = ""))
-                b <- parse(text = paste("movingenv$ma[movingenv$N-",i-1,"L]",sep = ""))
-                assign(paste(objectname,".t",i-1L,sep = ""),a,envir = globalenv())
-                assign(paste(objectname,"ma.t",i-1L,sep = ""),b,envir = globalenv())
-            }
-        }
-    }
-    if(movingenv$ncum>n-1){
-        movingenv$tmp <- updatemean(xnew = parent.frame()[[objectname]],xold = movingenv$origin[1],meanold = movingenv$ma[movingenv$N],n=movingenv$N)
-        movingenv$origin <- c(movingenv$origin[-1],parent.frame()[[objectname]])
-        movingenv$ncum <- movingenv$ncum+1L
-        movingenv$ma <- c(movingenv$ma[-1],movingenv$tmp)
-    }
-    else if(movingenv$ncum<n-1){
-        movingenv$origin <- c(movingenv$origin[-1],parent.frame()[[objectname]])
-        movingenv$ncum <- movingenv$ncum+1L
-        return()
-    }
-    else{
-        ## movingenv$ncum==n-1
-        movingenv$origin <- c(movingenv$origin[-1],parent.frame()[[objectname]])
-        movingenv$ncum <- movingenv$ncum+1L
-        movingenv$ma[movingenv$N] <- mean(movingenv$origin)
-    }
-}
-
-##' moving variance
-##' 
-##'  generate 3 series: original, mean and var
-##'
-##' @export
-##'
-movingvariance <- function(objectname,n,IMLAZY=TRUE,LAZYLAG=3){
-    if(!exists("movingenv",envir=globalenv())){
-        movingenv <- new.env(parent = globalenv())
-        movingenv$origin <- c(parent.frame()[[objectname]],rep(NA,n-1))
-        movingenv$ma <- rep(as.numeric(NA),n)
-        movingenv$mv <- rep(as.numeric(NA),n)
-        movingenv$ncum <- 0L
-        movingenv$N <- n
-        movingenv$tmp <- list(meannew=numeric(1),varnew=numeric(1))
-        assign("movingenv",movingenv,envir = globalenv())
-        ## generate expressions
-        if(IMLAZY){
-            if(!exists(".tradingstates",envir=globalenv())){
-                warning(".tradingstates is NULL, better initialize simulator before using this function")
-            }else{
-                if(.tradingstates$IMLAZY==FALSE){
-                    warning("part of LAZY functions are not generated! Please set IMLAZY=TRUE in initializestates().")
-                }
-            }
-            .furtherlazyfunctions()
-            for(i in 1:min(LAZYLAG,n)){
-                a <- parse(text = paste("movingenv$origin[movingenv$N-",i-1,"L]",sep = ""))
-                b <- parse(text = paste("movingenv$ma[movingenv$N-",i-1,"L]",sep = ""))
-                c <- parse(text = paste("movingenv$mv[movingenv$N-",i-1,"L]",sep = ""))
-                assign(paste(objectname,".t",i-1L,sep = ""),a,envir = globalenv())
-                assign(paste(objectname,".ma.t",i-1L,sep = ""),b,envir = globalenv())
-                assign(paste(objectname,".mv.t",i-1L,sep = ""),c,envir = globalenv())
-            }
-        }
-    }
-    if(movingenv$ncum>n-1){
-        movingenv$tmp <- updatevar(xnew = parent.frame()[[objectname]],xold = movingenv$origin[1],meanold = movingenv$ma[movingenv$N],varold = movingenv$mv[movingenv$N],n=movingenv$N)
-        movingenv$origin <- c(movingenv$origin[-1],parent.frame()[[objectname]])
-        movingenv$ncum <- movingenv$ncum+1L
-        movingenv$ma <- c(movingenv$ma[-1],movingenv$tmp$meannew)
-        movingenv$mv <- c(movingenv$mv[-1],movingenv$tmp$varnew)
-    }
-    else if(movingenv$ncum<n-1){
-        movingenv$origin <- c(movingenv$origin[-1],parent.frame()[[objectname]])
-        movingenv$ncum <- movingenv$ncum+1L
-        return()
-    }
-    else{
-        ## movingenv$ncum==n-1
-        movingenv$origin <- c(movingenv$origin[-1],parent.frame()[[objectname]])
-        movingenv$ncum <- movingenv$ncum+1L
-        movingenv$ma[movingenv$N] <- mean(movingenv$origin)
-        movingenv$mv[movingenv$N] <- sum((movingenv$origin-movingenv$ma[movingenv$N])^2)/movingenv$N
-        
-    }
-}
-
 
 ## ## 1. agents: output target holdings' signal
 ## ## 2. riskmanager

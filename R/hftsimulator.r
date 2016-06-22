@@ -1,6 +1,6 @@
 
-options(digits.secs=DIGITSSECS)
-options(stringsAsFactors = STRINGSASFACTORS)
+options(digits.secs=3)
+options(stringsAsFactors = FALSE)
 
 
 .tradingstates <- new.env(hash = TRUE)
@@ -1091,6 +1091,7 @@ BSO <- function(orderbook,preorderbook,bsi){
 ## formatlist is either a list of data format specifycation or a list of lists of specifications.
 ## instrumentids: instrument identifier
 HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
+                         progressbar=TRUE,
                          tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE,
                          verboselimitpriors=TRUE){
     ## strategy function check
@@ -1100,7 +1101,7 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     ## data check
     ## put all data in a list, the list is of the same length of instrumetids
     if(!is(instrumentids,"character")) stop("instrumentids must be of type character.")
-    if(is(datalist,list)){
+    if(is(datalist,"list")){
         if(length(instrumentids)!=length(datalist)) stop("length of instrumentids is not equal to length of datalist!")
         names(datalist) <- instrumentids #sequence of the datas must be in accordance with instrumentids.
     }else if(is(datalist,"data.frame")){
@@ -1120,6 +1121,7 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
         stop("missing format specifications in ",substitute(formatlist))
     }
 
+    cat("Initializing simulator states...")
 
     ## garbage picker
     garbagepicker <- eval(parse(text = deparse(stg)))
@@ -1135,6 +1137,68 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     .tradingstates$Sleep <- Sleep           #trade-center idle time
     .tradingstates$closed <- closed         #recored all closed orders
     .tradingstates$unclosed <- unclosed     #track all unclosed orders
+    .tradingstates$IMLAZY <- IMLAZY
+    if(IMLAZY) .lazyfunctions()
+
+    .tradingstates$orders <- data.frame(
+        instrumentid=character(),
+        orderid=character(),direction=numeric(),
+        price=numeric(),hands=numeric(),
+        action=character(),
+        initialhands=numeric(),
+        timeoutlist=logical(),          #wether to check timeout
+        timeoutchase=logical(),         #wether to chase after timeout
+        timeoutsleep=numeric(),          #length of timeout,in secs
+        chaselist=logical(),            #wether to chase
+        chasesleep=numeric(),           #length of chase sleep time,secs
+        submitstart=character(),        #chase or timeout start time
+        stringsAsFactors=FALSE)
+    .tradingstates$limitprior <- NULL    #high prior limit orders
+    .tradingstates$capital <- data.frame(
+        instrumentid=character(),
+        longholdingstoday=numeric(), shortholdingstoday=numeric(),
+        longholdingspreday=numeric(),shortholdingspreday=numeric(),
+        totallongholdings=numeric(),totalshortholdings=numeric(),
+        cash=numeric(),stringsAsFactors=FALSE
+        )
+    .tradingstates$th <- data.frame(instrumentid=character(),longholding=numeric(),
+                                   shortholding=numeric(),stringsAsFactors = FALSE) #targetholdings required by trade center
+    .tradingstates$orderhistory <- data.frame(
+        instrumentid=character(),orderid=character(),
+        direction=numeric(),price=numeric(),
+        hands=numeric(),action=character(),
+        tradetime=character(),tradeprice=numeric(),
+        cost=numeric(),status=numeric(),
+        initialhands=numeric(),
+        stringsAsFactors = FALSE)
+    .tradingstates$capitalhistory <- data.frame(
+        instrumentid=character(),
+        longholdingstoday=numeric(), shortholdingstoday=numeric(),
+        longholdingspreday=numeric(),shortholdingspreday=numeric(),
+        totallongholdings=numeric(),totalshortholdings=numeric(),
+        cash=numeric(),tradetime=character(),
+        tradeprice=numeric(),tradehands=numeric(),cost=numeric(),
+        stringsAsFactors=FALSE)
+    .tradingstates$longopen <- data.frame(
+        instrumentid=character(),orderid=character(),
+        action=character(),
+        direction=numeric(),
+        tradehands=numeric(),
+        tradeprice=numeric(),
+        stringsAsFactors = FALSE)
+    .tradingstates$shortclose <- .tradingstates$longopen
+    .tradingstates$shortopen <- .tradingstates$longopen
+    .tradingstates$shortclose <- .tradingstates$longopen
+    .tradingstates$currenttradetime <- character() #current time tracker
+    .tradingstates$startoftheday <- logical()      #interdaily
+    .tradingstates$verbosepriors <- NULL
+    .tradingstates$justchanged <- NULL
+    .tradingstates$lastchange <- NULL
+    .tradingstates$closedtracker <- data.frame(instrumentid=character(),cash=numeric(),stringsAsFactors=FALSE) #closed
+    .tradingstates$unclosedlong <- .tradingstates$longopen
+    .tradingstates$unclosedshort <- .tradingstates$longopen
+    .tradingstates$unclosedsettleprice <- logical()
+
 
     ## <<<<<<<<<<<<<<< TO DO >>>>>>>>>>>>>>>
     ## rearrange data sequence (to support multiple instruments with different data formats)
@@ -1191,6 +1255,11 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
                              multiplier=dataformat$multiplier)
     }
 
+    cat("done\n")
+
+    if(progressbar){
+        pb <- txtProgressBar(min = 1,max = nrow(datalist),style = 3)
+    }
     ## simulation
     for(i in 1:nrow(datalist)){
         .CFEupdate(DATA = datalist[i,],INSTRUMENTID = datalist[i,"instrumentid"])
@@ -1198,6 +1267,10 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
         if(verboselimitpriors){
             .verboselimitpriors()
         }
+        if(progressbar){
+            setTxtProgressBar(pb,i)
+        }
     }
-    invisible(list(orders=.tradingstates$orderhistory,capitals=.tradingstates$capitalhistory))
+    cat("\n")
+    ## invisible(list(orders=.tradingstates$orderhistory,capitals=.tradingstates$capitalhistory))
 }

@@ -745,7 +745,7 @@
 
 .lazyfunctions <- function(){
     ## setOperators("%c%","%&%","%!%","%==%","%$%")
-    setOperators("%c%","%$%")
+    ## setOperators("%c%","%$%")
     ## concatenate stings
     `%c%` <- function(x,y){
         return(paste(as.character(x),as.character(y),sep=""))
