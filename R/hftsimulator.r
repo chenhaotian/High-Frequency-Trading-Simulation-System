@@ -1079,46 +1079,44 @@ BSO <- function(orderbook,preorderbook,bsi){
 }
 
 
-dataformat <- list(pbuyhands = seq(from = 32,by = 1,length.out = 5),
-pbuyprice = seq(from = 22,by = 1,length.out = 5),
-psellhands = seq(from = 37,by = 1,length.out = 5),
-psellprice = seq(from = 27,by = 1,length.out = 5),
-ptradetime = 2,plastprice = 4,pvolume = 12,
-ppresettleprice=8)
+## dataformat <- list(pbuyhands = seq(from = 32,by = 1,length.out = 5),
+## pbuyprice = seq(from = 22,by = 1,length.out = 5),
+## psellhands = seq(from = 37,by = 1,length.out = 5),
+## psellprice = seq(from = 27,by = 1,length.out = 5),
+## ptradetime = 2,plastprice = 4,pvolume = 12,
+## ppresettleprice=8)
 
-if(is.null(dataformat[["fee"]])){
-    fee=c(long=0,short=0,closetoday=0,closepreday=0)
-}
-if(is.null(dataformat[["closeprior"]])){
-    closeprior = "today"
-}
-if(is.null(dataformat[["timeformat"]])){
-    timeformat = "%Y-%m-%d %H:%M:%OS"
-}
-if(is.null(dataformat[["endoftheday"]])){
-    endoftheday="23:59:59.999"
-}
-if(is.null(dataformat[["multiplier"]])){
-    multiplier=1
-}
-
+## ...: other parameters passed to stg
 ## datalist must be a list of data.frame(s) or a data.frame.
 ## formatlist is either a list of data format specifycation or a list of lists of specifications.
 ## instrumentids: instrument identifier
-HFTsimulator <- function(stg,instrumentids,datalist,formatlist,
+HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
                          tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE,
-                         instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,ppresettleprice,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000){
+                         verboselimitpriors=TRUE){
     ## strategy function check
     if(!is(stg,"function")){
         stop(substitute(stg),"is not a function!")
     }
     ## data check
+    ## put all data in a list, the list is of the same length of instrumetids
+    if(!is(instrumentids,"character")) stop("instrumentids must be of type character.")
     if(is(datalist,list)){
         if(length(instrumentids)!=length(datalist)) stop("length of instrumentids is not equal to length of datalist!")
+        names(datalist) <- instrumentids #sequence of the datas must be in accordance with instrumentids.
+    }else if(is(datalist,"data.frame")){
+        if(length(instrumentids)!=1) stop("unequal length of data and instrumentids")
+        eval(parse(text = paste("datalist<- list(",instrumentids,"=datalist)",sep = ""))) #convert to list
+    }else{
+        stop("datalist must be of type data.frame or list")
     }
     ## data format check
-    if(any(!c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume","ppresettleprice")%in%names(formatlist)) &
-       any(!c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume","ppresettleprice")%in%names(formatlist[[1]]))){
+    ## put all dataformat in a list, the list is of the same length of instrumetids
+    requiredformat <- c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume","ppresettleprice")
+    if(all(requiredformat%in%names(formatlist))){
+        eval(parse(text = paste("formatlist <- list(",paste(paste(instrumentids,"=formatlist"),collapse = ","),")")))
+    }else if(all(requiredformat%in%names(formatlist[[1]]))){
+        if(length(formatlist)!=1 & length(formatlist)!=length(instrumentids)) stop("unequal length of formatlist and datalist.")
+    }else{
         stop("missing format specifications in ",substitute(formatlist))
     }
 
@@ -1131,12 +1129,75 @@ HFTsimulator <- function(stg,instrumentids,datalist,formatlist,
     options(stringsAsFactors = STRINGSASFACTORS)
 
     ## initialize simulator state
-    .tradingstates$tc <- tc
+    .tradingstates$tc <- tc             #trade-center
     .tradingstates$septraded <- septraded
-    .tradingstates$interdaily <- interdaily
-    .tradingstates$Sleep <- Sleep
-    .tradingstates$closed <- closed
-    .tradingstates$unclosed <- unclosed
-    ## instrument instruments' states
+    .tradingstates$interdaily <- interdaily #interdaily support
+    .tradingstates$Sleep <- Sleep           #trade-center idle time
+    .tradingstates$closed <- closed         #recored all closed orders
+    .tradingstates$unclosed <- unclosed     #track all unclosed orders
+
+    ## <<<<<<<<<<<<<<< TO DO >>>>>>>>>>>>>>>
+    ## rearrange data sequence (to support multiple instruments with different data formats)
+    if(length(formatlist)>=2){
+        if(any(vapply(2:length(formatlist),function(i){
+            !identical(formatlist[[i]],formatlist[[i-1]])
+        },FUN.VALUE = logical(1)))) stop("multiple instruments with different data formats is not supported yet.")
+    }
+    ## merge all instruments' data to a large data.frame
+    tags <- rep(instrumentids,times=vapply(datalist,function(d){nrow(d)},FUN.VALUE = numeric(1)))
+    datalist <- lapply(datalist,function(d){names(d) <- paste("V",1:ncol(d),sep = "");return(d)})
+    datalist <- do.call(rbind,datalist)
+    datalist$instrumentid <- tags
+    datalist <- datalist[order(datalist[,formatlist[[1]]$ptradetime]),] #order by time
     
+    ## initialize instruments' states
+    if(length(formatlist)==1 & length(formatlist)!=length(instrumentids)){
+        formatlist <- rep(formatlist,length(instrumentids))
+        names(formatlist) <- instrumentids
+    }
+    for(instrumentid in instrumentids){
+
+        dataformat <- formatlist[[instrumentid]]
+        
+        if(is.null(dataformat[["fee"]])){
+            dataformat$fee=c(long=0,short=0,closetoday=0,closepreday=0)
+        }
+        if(is.null(dataformat[["closeprior"]])){
+            dataformat$closeprior = "today"
+        }
+        if(is.null(dataformat[["timeformat"]])){
+            dataformat$timeformat = "%Y-%m-%d %H:%M:%OS"
+        }
+        if(is.null(dataformat[["endoftheday"]])){
+            dataformat$endoftheday="23:59:59.999"
+        }
+        if(is.null(dataformat[["multiplier"]])){
+            dataformat$multiplier=1
+        }
+
+        initializeinstrument(instrumentid=instrumentid,
+                             pbuyhands=dataformat$pbuyhands,
+                             pbuyprice=dataformat$pbuyprice,
+                             psellhands=dataformat$psellhands,
+                             psellprice=dataformat$psellprice,
+                             ptradetime=dataformat$ptradetime,
+                             plastprice=dataformat$plastprice,
+                             pvolume=dataformat$pvolume,
+                             ppresettleprice=dataformat$ppresettleprice,
+                             fee=dataformat$fee,
+                             closeprior=dataformat$closeprior,
+                             timeformat=dataformat$timeformat,
+                             endoftheday=dataformat$endoftheday,
+                             multiplier=dataformat$multiplier)
+    }
+
+    ## simulation
+    for(i in 1:nrow(datalist)){
+        .CFEupdate(DATA = datalist[i,],INSTRUMENTID = datalist[i,"instrumentid"])
+        garbagepicker(...)
+        if(verboselimitpriors){
+            .verboselimitpriors()
+        }
+    }
+    invisible(list(orders=.tradingstates$orderhistory,capitals=.tradingstates$capitalhistory))
 }
