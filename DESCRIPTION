@@ -10,6 +10,7 @@ License: GPL-3
 LazyData: true
 Date: 2015-10-26
 Collate:
+    'env.r'
     'utils.r'
     'hftsimulator.r'
 RoxygenNote: 5.0.1
