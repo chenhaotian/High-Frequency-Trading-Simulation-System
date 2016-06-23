@@ -720,233 +720,6 @@
     multisubmission(instrumentid = orders$instrumentid,direction = orders$direction,price=NULL,hands = orders$hands,action = orders$action,chaselist = TRUE,chasesleep=orders$chasesleep)
 }
 
-.lazyfunctions <- function(){
-    ## logicals
-    `&` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-            x <- ifelse(is.logical(x),x,NA)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-            y <- ifelse(is.logical(y),y,NA)
-        }
-        .Primitive("&")(x,y)
-    }
-    assign("&",value = `&`,envir = .GlobalEnv)
-    `|` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-            x <- ifelse(is.logical(x),x,NA)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-            y <- ifelse(is.logical(y),y,NA)
-        }
-        .Primitive("|")(x,y)
-    }
-    assign("|",value = `|`,envir = .GlobalEnv)
-    `==` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-            ## x <- ifelse(is.logical(x),x,NA)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-            ## y <- ifelse(is.logical(y),y,NA)
-        }
-        .Primitive("==")(x,y)
-    }
-    assign("==",value = `==`,envir = .GlobalEnv)
-    `!=` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-            ## x <- ifelse(is.logical(x),x,NA)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-            ## y <- ifelse(is.logical(y),y,NA)
-        }
-        .Primitive("!=")(x,y)
-    }
-    assign("!=",value = `!=`,envir = .GlobalEnv)
-
-    isTRUE <- function(x){
-        if(is.expression(x)){
-            x <- eval(x)
-            x <- ifelse(is.logical(x),x,NA)
-        }
-        identical(TRUE,x)
-    }
-    assign("isTRUE",value = `isTRUE`,envir = .GlobalEnv)
-    ## use with caution!!!
-    `!` <- function(y){
-        if(is.expression(y)){
-            y <- eval(y)
-            y <- ifelse(is.logical(y),y,NA)
-        }
-        .Primitive("!")(y)
-    }
-    assign("!",value = `!`,envir = .GlobalEnv)
-    
-    ANY <- function(...,na.rm=FALSE){
-        base::any(vapply(list(...),function(par){
-            if(is.expression(par)){
-                par <- eval(par)
-                if(!is.logical(par))
-                    return(NA)
-                else
-                    return(par)
-            }else{
-                if(is.logical(par))
-                    return(par)
-                else
-                    return(NA)
-            }
-        },FUN.VALUE = TRUE),na.rm = na.rm)
-    }
-    assign("ANY",value = ANY,envir = .GlobalEnv)
-    ALL <- function(...,na.rm=FALSE){
-        base::all(vapply(list(...),function(par){
-            if(is.expression(par)){
-                par <- eval(par)
-                if(!is.logical(par))
-                    return(NA)
-                else
-                    return(par)
-            }else{
-                if(is.logical(par))
-                    return(par)
-                else
-                    return(NA)
-            }
-        },FUN.VALUE = TRUE),na.rm = na.rm)
-    }
-    assign("ALL",value = ALL,envir = .GlobalEnv)    
-    ## y must be specified.
-    ## example: shortopen%$%"orderid"
-    `%$%` <- function(x,y){
-        if(is.expression(x))
-            x <- eval(x)
-        x[[y]]
-    }
-    assign("%$%",value = `%$%`,envir = .GlobalEnv)
-    
-}
-
-.furtherlazyfunctions <- function(){
-    ## do not support + - * \
-    
-    ## !!!! may cause trouble!!!!!!!!!!!!!!!!!!!!
-    `>=` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-        }
-        .Primitive(">=")(x,y)
-    }
-    assign(">=",value = `>=`,envir = .GlobalEnv)
-    `>` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-        }
-        .Primitive(">")(x,y)
-    }
-    assign(">",value = `>`,envir = .GlobalEnv)
-    `<=` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-        }
-        .Primitive("<=")(x,y)
-    }
-    assign("<=",value = `<=`,envir = .GlobalEnv)
-    `<` <- function(x,y){
-        if(is.expression(x)){
-            x <- eval(x)
-        }
-        if(is.expression(y)){
-            y <- eval(y)
-        }
-        .Primitive("<")(x,y)
-    }
-    assign("<",value = `<`,envir = .GlobalEnv)
-    ## !!!! may cause trouble!!!!!!!!!!!!!!!!!!!!
-}
-
-.lazyexpressions <- function(instrumentid,ninstruments=NULL,type="specific"){
-    match.arg(type,c("specific","general"))
-    if(type=="general"){
-        if(is.null(ninstruments)){
-            stop("ninstruments can't be NULL when type=general!")
-        }
-        prefix <- paste("instrument",ninstruments,sep = "")
-    }
-    else if(type=="specific"){
-        prefix <- instrumentid
-    }
-
-    `%c%` <- function(x,y){
-        return(paste(as.character(x),as.character(y),sep=""))
-    }
-    
-    ## orders
-    orders.non <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])==0")
-    orders.exist <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])!=0")
-    assign(prefix%c%".orders.non",orders.non,envir = .GlobalEnv)
-    assign(prefix%c%".orders.exist",orders.exist,envir = .GlobalEnv)
-    ## longopen
-    longopen <- parse(text=".tradingstates$orders[.tradingstates$orders$action==\"open\" & .tradingstates$orders$direction==1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",]")
-    assign(prefix%c%".longopen",longopen,envir = .GlobalEnv)
-    longopen.non <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"open\" & .tradingstates$orders$direction==1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])==0")
-    assign(prefix%c%".longopen.non",longopen.non,envir = .GlobalEnv)
-    longopen.exist <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"open\" & .tradingstates$orders$direction==1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])!=0")
-    assign(prefix%c%".longopen.exist",longopen.exist,envir = .GlobalEnv)
-    ## shortopen
-    shortopen <- parse(text=".tradingstates$orders[.tradingstates$orders$action==\"open\"&.tradingstates$orders$direction==-1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",]")
-    assign(prefix%c%".shortopen",shortopen,envir = .GlobalEnv)
-    shortopen.non <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"open\"&.tradingstates$orders$direction==-1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])==0")
-    assign(prefix%c%".shortopen.non",shortopen.non,envir = .GlobalEnv)
-    shortopen.exist <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"open\"&.tradingstates$orders$direction==-1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])!=0")
-    assign(prefix%c%".shortopen.exist",shortopen.exist,envir = .GlobalEnv)
-    ## longclose
-    longclose <- parse(text=".tradingstates$orders[.tradingstates$orders$action==\"close\"&.tradingstates$orders$direction==1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",]")
-    assign(prefix%c%".longclose",longclose,envir = .GlobalEnv)
-    longclose.non <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"close\"&.tradingstates$orders$direction==1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])==0")
-    assign(prefix%c%".longclose.non",longclose.non,envir = .GlobalEnv)
-    longclose.exist <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"close\"&.tradingstates$orders$direction==1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])!=0")
-    assign(prefix%c%".longclose.exist",longclose.exist,envir = .GlobalEnv)
-    ## shortclose
-    shortclose <- parse(text=".tradingstates$orders[.tradingstates$orders$action==\"close\"&.tradingstates$orders$direction==-1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",]")
-    assign(prefix%c%".shortclose",shortclose,envir=.GlobalEnv)
-    shortclose.non <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"close\"&.tradingstates$orders$direction==-1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])==0")
-    assign(prefix%c%".shortclose.non",shortclose.non,envir=.GlobalEnv)
-    shortclose.exist <- parse(text="nrow(.tradingstates$orders[.tradingstates$orders$action==\"close\"&.tradingstates$orders$direction==-1 &"%c%".tradingstates$orders$instrumentid==\""%c%instrumentid%c%"\",])!=0")
-    assign(prefix%c%".shortclose.exist",shortclose.exist,envir=.GlobalEnv)
-    ## holdings
-    holdings.exist <- parse(text=".tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"] >0 | .tradingstates$capital$totalshortholdings"%c% "[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"]"%c%"<0")
-    assign(prefix%c%".holdings.exist",holdings.exist,envir=.GlobalEnv)
-    holdings.non <- parse(text=".tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"] ==0 & .tradingstates$capital$totalshortholdings"%c% "[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"]"%c%"==0")
-    assign(prefix%c%".holdings.non",holdings.non,envir=.GlobalEnv)
-    ## longholdings
-    longholdings.exist <- parse(text=".tradingstates$capital$totallongholdings"%c% "[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"]"%c%">0")
-    assign(prefix%c%".longholdings.exist",longholdings.exist,envir=.GlobalEnv)
-    longholdings.non <- parse(text=".tradingstates$capital$totallongholdings"%c% "[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"]"%c%"==0")
-    assign(prefix%c%".longholdings.non",longholdings.non,envir=.GlobalEnv)
-    ## shortholdings
-    shortholdings.exist <- parse(text=".tradingstates$capital$totalshortholdings"%c% "[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"]"%c%"<0")
-    assign(prefix%c%".shortholdings.exist",shortholdings.exist,envir=.GlobalEnv)
-    shortholdings.non <- parse(text=".tradingstates$capital$totalshortholdings"%c% "[.tradingstates$capital$instrumentid==\""%c%instrumentid%c%"\"]"%c%"==0")
-    assign(prefix%c%".shortholdings.non",shortholdings.non,envir=.GlobalEnv)
-}
-
 .cancelorders <- function(orders){
     if(nrow(orders)>0){
         for(i in seq_along(orders$orderid)){
@@ -1079,45 +852,90 @@
     .tradingstates$verbosepriors[[.tradingstates$currenttradetime]] <- .tradingstates$limitprior
 }
 
-## .sucker <- .DEFMACRO(LONGHOLDINGS,SHORTHOLDINGS,expr = {
-##     vol <- abs(hands)
-##     if(direction==-1){
-##         ## close long, hold>0, untrade<0
-##         hold <- sum(.tradingstates$capital$LONGHOLDINGS[.tradingstates$capital$instrumentid==instrumentid])
-##         nethold <- hold+untrade
-##         if( (hold==0) | direction==sign(nethold) |
-##            vol>abs(hold) | vol>abs(nethold) |
-##            (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
-##             .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
-##             stop(6)
-##         }
-##     }
-##     else{
-##         ## close short, hold<0, untrade>0
-##         hold <- sum(.tradingstates$capital$SHORTHOLDINGS[.tradingstates$capital$instrumentid==instrumentid])
-##         nethold <- hold+untrade
-##         if( (hold==0) | direction==sign(nethold) |
-##            vol>abs(hold) | vol>abs(nethold) |
-##            (any(currentinstrument$price==0&currentinstrument$direction==direction&currentinstrument$action%in%c("close",action)) & price==0) ){
-##             .writeorderhistory(instrumentid,orderid,direction,hands,price,tradeprice=0,status=6,action,cost=0)
-##             stop(6)
-##         }
-##     }
-## })
+.initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000){
 
-## .capchange <- .DEFMACRO(TODAY,TOTAL,HANDS,COMMISSION,expr={
-##     ## cashchange <- (-1)*direction*HANDS*tradeprice-HANDS*tradeprice*COMMISSION
-##     idx <- .tradingstates$capital$instrumentid==instrumentid
-##     ## initialize new instrument
-##     if(!any(idx)){
-##         .tradingstates$capital <- rbind(.tradingstates$capital,data.frame(instrumentid=instrumentid,longholdingstoday=0,shortholdingstoday=0,longholdingspreday=0,shortholdingspreday=0,totallongholdings=0,totalshortholdings=0,cash=0,stringsAsFactors=FALSE))
-##         idx <- nrow(.tradingstates$capital)
-##     }
-##     handschange <- HANDS*direction
-##     trans <- handschange*tradeprice*(-1)*multiplier
-##     cost <- cost + HANDS*tradeprice*COMMISSION*multiplier
-##     .tradingstates$capital$cash[idx] <- .tradingstates$capital$cash[idx]+trans-cost
-##     .tradingstates$capital$TODAY[idx] <- .tradingstates$capital$TODAY[idx]+handschange
-##     .tradingstates$capital$TOTAL[idx] <- .tradingstates$capital$TOTAL[idx]+handschange
-##     ## capital calculation needs prices of many different instruments......
-## })
+    ## IMPORTANT NOTE:
+    ## initialize only one instrument at a time!
+    ## run .initializeinstrument multiple times for multiple instruments
+    
+    ## !!!!!!!!!
+    CASH <- 0
+    
+    ## initialize instrument
+    
+    .INSTRUMENT$instrumentid[[instrumentid]] <- instrumentid
+    
+    .INSTRUMENT$pbuyhands[[instrumentid]] <- pbuyhands
+    .INSTRUMENT$pbuyprice[[instrumentid]] <- pbuyprice
+    ## sellbook:
+    .INSTRUMENT$psellhands[[instrumentid]] <- psellhands
+    .INSTRUMENT$psellprice[[instrumentid]] <- psellprice
+    
+    .INSTRUMENT$ptradetime[[instrumentid]] <- ptradetime
+    .INSTRUMENT$plastprice[[instrumentid]] <- plastprice
+    .INSTRUMENT$pvolume[[instrumentid]] <- pvolume
+    ## .INSTRUMENT$ppresettleprice[[instrumentid]] <- ppresettleprice
+    
+    .INSTRUMENT$fee[[instrumentid]] <- fee
+    .INSTRUMENT$closeprior[[instrumentid]] <- closeprior
+    
+    .INSTRUMENT$timeformat[[instrumentid]] <- timeformat
+    
+    .INSTRUMENT$endoftheday[[instrumentid]] <- paste("1970-01-01",endoftheday)
+    .INSTRUMENT$tomidnight[[instrumentid]] <- difftime("1970-01-02 00:00:00.000",.INSTRUMENT$endoftheday[[instrumentid]],units = "secs")
+    
+    .INSTRUMENT$multiplier[[instrumentid]] <- multiplier
+    
+    .INSTRUMENT$pre[[instrumentid]] <- 0
+    .INSTRUMENT$current[[instrumentid]] <- 0
+    
+    ## new day tracker
+    .tradingstates$startoftheday[instrumentid] <- FALSE
+    
+    ## add zero holding tracker
+    .tradingstates$closedtracker <- unique(rbind(
+        .tradingstates$closedtracker,
+        data.frame(instrumentid=instrumentid,cash=CASH,stringsAsFactors=FALSE)
+    ))
+    
+    
+    ## initialize trade center
+    .tradingstates$justchanged[instrumentid] <- FALSE
+    .tradingstates$lastchange[instrumentid] <- "1970-01-01 00:00:01.300"
+    
+    ## initialize instrument capital
+    if(nrow(.tradingstates$capital[.tradingstates$capital$instrumentid==instrumentid,])==0){
+        .tradingstates$capital <- rbind(
+            .tradingstates$capital,
+            data.frame(
+                instrumentid=instrumentid,
+                longholdingstoday=0, shortholdingstoday=0,
+                longholdingspreday=0,shortholdingspreday=0,
+                totallongholdings=0,totalshortholdings=0,
+                cash=CASH,stringsAsFactors=FALSE
+                )
+            )
+    }
+    else{
+        .tradingstates$capital$longholdingstoday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$shortholdingstoday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$longholdingspreday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$shortholdingspreday[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid] <- 0
+        .tradingstates$capital$cash[.tradingstates$capital$instrumentid==instrumentid] <- CASH
+    }
+    
+    ## initialize target holding(after read holding) for trade center
+    .tradingstates$th <- rbind(.tradingstates$th,
+                               data.frame(instrumentid=instrumentid,
+                                          longholding=.tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid],
+                                          shortholding=.tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid],
+                                          stringsAsFactors = FALSE))
+    .tradingstates$th <- unique(.tradingstates$th)
+    if(nrow(.tradingstates$th)==0){
+        stop("error while generating target holdings")
+    }
+    
+    
+}

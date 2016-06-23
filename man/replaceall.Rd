@@ -8,34 +8,36 @@ replaceall(instrumentid = NULL, direction = NULL, action = NULL,
   pricemin = NULL, pricemax = NULL, newprice = NULL)
 }
 \arguments{
-\item{instrumentid}{character, specifying a filter for instrument identifier.}
+\item{instrumentid}{character, specifying a filter for instrument
+identifiers.}
 
-\item{direction}{integer, specifying a filter for trading direction. 1 for long and -1 for short.}
+\item{direction}{integer, specifying a filter for trading directions.
+1 for long and -1 for short.}
 
-\item{action}{character, specifying a filter for actions, can take value from one of "open","close","closetoday","closepreday".}
+\item{action}{character, specifying a filter for actions, can take value
+from one of "open","close","closetoday","closepreday"}
 
 \item{pricemin}{numeric, specifying a filter for price lower limit.}
 
 \item{pricemax}{numeric, specifying a filter for price upper limit.}
 
-\item{newprice}{numeric, new order price, will replace with a market order when newprice=0}
-
-\item{tradetime}{character, time in current tick.}
+\item{newprice}{numeric, new order price, will replace with a market order
+when newprice=0.}
 }
 \value{
 nothing
 }
 \description{
-replace all satisfied orders with one new order which has a new price and a new hands equal to the cumulated hands of orders replaced.
+replace all satisfied orders with one new one, which has a new
+price and a hands equal to the cumulated hands of orders replaced.
 }
 \examples{
 \dontrun{
-## find all orders satisfy direction==-1 and action=='open' and price <=101, replace them with a new order with price 100.01.
-replaceall(tradetime,"TF1512",direction=-1,action='open',pricemax=101,newprice=100.01)
+## find all orders satisfy direction==-1 and action=='open' and
+## price <=101, replace them with a new order with price 100.01.
+replaceall(tradetime,"TF1512",direction=-1,action='open',
+           pricemax=101,newprice=100.01)
 }
-}
-\author{
-Chen
 }
 \seealso{
 \link{cancelall}

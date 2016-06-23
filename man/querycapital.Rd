@@ -7,19 +7,26 @@
 querycapital(instrumentids = NULL)
 }
 \arguments{
-\item{instrumentids}{instrumentids to be queried, return all orders if instrumentids=NULL}
+\item{instrumentids}{specifying instrumentids to be queried, return total
+capital status if instrumentids=NULL, default NULL.}
 }
 \value{
-instruments
+a data.frame of all specified instruments' current status
 }
 \description{
-querycapital
-rycapital
+get current capital status.
 }
 \details{
-querycapital
+return a data.frame of current capital status, each row
+of the data.frame representing an instrument, if instrumentids is not NULL,
+querycapital will return the capital status specified by instrumentids.
 }
-\author{
-Chen
+\examples{
+\dontrun{
+## get total capital status
+querycapital()
+## get capital status of TF1603 and T1603
+querycapital(instrumentids=c("TF1603","T1603"))
+}
 }
 

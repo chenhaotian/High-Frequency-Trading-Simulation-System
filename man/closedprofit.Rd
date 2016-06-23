@@ -10,23 +10,23 @@ closedprofit(instrumentid)
 \item{instrumentid}{character, instrument identifier}
 }
 \value{
-closed profit, numeric
+numeric, closed profit
 }
 \description{
-calculate closed profit. require setting closed=TRUE in initializestates()
+calculate closed profit. require setting closed=TRUE in
+HFTsimulator.
 }
 \details{
-closed profit is the most recent cash value when all holdings are equal to zero
+closed profit is the most recent cash when all holdings are
+equal to zero. total_profit = holdings_profit + closed_profit.
 }
 \examples{
 \dontrun{
+## get closed profit of TF1603
 closedprofit("TF1603")
 }
 }
-\author{
-Chen
-}
 \seealso{
-\link{initializestates} \link{holdingsprofit}
+\link{HFTsimulator} \link{holdingsprofit}
 }
 

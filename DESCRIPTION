@@ -5,7 +5,10 @@ Author: Chen Haotian
 Version: 0.1
 Maintainer: Chen Haotian<chen-haotian@qq.com>
 Depends:
-    R (>= 3.0.1)
+    R (>= 3.0.1),
+    methods,
+    stats,
+    utils
 License: GPL-3
 LazyData: true
 Date: 2015-10-26

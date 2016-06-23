@@ -9,26 +9,25 @@ lazysubmission(instrumentid, longholding = NULL, shortholding = NULL)
 \arguments{
 \item{instrumentid}{character, instrument identifier}
 
-\item{longholding}{integer, specifying target long holdings of 'instrumentid', longholding >=0}
+\item{longholding}{integer, specifying target long holdings of
+'instrumentid', longholding must be greater than or equal to 0.}
 
-\item{shortholding}{integer, specifying target short holdings of 'instrumentid', shortholding <= 0}
+\item{shortholding}{integer, specifying target short holdings of
+'instrumentid', shortholding must be less than or equal to 0.}
 }
 \value{
 nothing
 }
 \description{
-submit target holdings, trade center will cancel all irrevelant orders and chase bid1 or ask1 price automatically to achieve target holdings. this function can only be used when set tc=TRUE in initializestates()
+submit a target holding, simulator will cancel all irrevelant
+orders and chase bid1 or ask1 price automatically until the target holding
 }
 \examples{
 \dontrun{
-
- lazysubmission(tradetime,"TF1512",longholding=5,shortholding=-3)
+ lazysubmission("TF1512",longholding=5,shortholding=-3)
 }
-}
-\author{
-Chen
 }
 \seealso{
-\link{initializestates}
+\link{HFTsimulator}
 }
 

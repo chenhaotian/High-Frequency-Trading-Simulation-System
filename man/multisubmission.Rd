@@ -12,32 +12,60 @@ multisubmission(instrumentid = "qtid", orderid = NULL, direction = 1,
 \arguments{
 \item{instrumentid}{character, instrument identifier}
 
-\item{orderid}{character, if length(orderid)==0 (default), multisubmission will generate a random id for each order}
+\item{orderid}{character, if length(orderid)==0 (default), multisubmission
+will generate a random id for each order}
 
-\item{direction}{integer, specifying trading direction. 1 for long, -1 for short.}
+\item{direction}{integer, specifying trading direction. 1 for long,
+-1 for short.}
 
-\item{price}{numeric, specifiying order pirce.default NULL. NOTE: when price=0, ordersubmission() will submit a market order; when price=NULL, ordersubmission() will take the corresponding bid1 or ask1 price as order price.}
+\item{price}{numeric, specifiying order pirce.default NULL.
+NOTE: when price=0, ordersubmission will submit a market order; when
+price=NULL, ordersubmission() will take the corresponding bid1 or ask1
+price as order price.}
 
 \item{hands}{integer, specifying hands to be submitted.}
 
-\item{action}{character, action can take value from one of "open","close","closetoday","closepreday" and "cancel". hands submitted in action='close' can not be greater than the sum of current holdings and queuing open hands.}
+\item{action}{character, action can take value from one of "open","close",
+"closetoday","closepreday" and "cancel". hands submitted in action='close'
+can not be greater than the sum of current holdings and queuing open hands.}
+
+\item{timeoutlist}{logical, specyfing wether to give current order a
+timeout interval, the length of the interval is specified by timeoutsleep.
+if the order hasn't been executed after a time interval greater than
+timeoutsleep, the order will be canceled.}
+
+\item{timeoutchase}{logical, indicating whether to chase order when timeout.}
+
+\item{timeoutsleep}{numeric, specifying the timeout inverval in seconds.}
+
+\item{chaselist}{logical, specifying wether to put this order to
+auto-chase list. if the order hasn' been executed for a time inverval
+longer than chasesleep, the simulator will cancel this order(if needed),
+then submit a new one with the sampe hands and a price equal to the
+bid1/ask1 price. the simulator will repeat this action until the original
+submitted amount is executed.}
+
+\item{chasesleep}{numeric, specifying the time interval between each
+execution check. In seconds.}
 }
 \value{
-order status
+order status code.
 }
 \description{
-submit multiple orders, a simple wrapper of ordersubmission(). instrumentid, direction, price, hands and action must be of length one or the same length with the number of orders; orderid must be of length zero or the same length with the number of orders!
+submit multiple orders, a simple wrapper of ordersubmission.
+instrumentid, direction, price, hands and action must be of length one or
+the same length with the number of orders; orderid must be of length zero
+or the same length with the number of orders!
 }
 \examples{
 \dontrun{
-## submit leng(orderbook$buybook$price[-1]) long open orders in TF1512.
-multisubmission(instrumentid="TF1512",orderid=NULL,direction=1,price=orderbook$buybook$price[-1],hands=1,action='open')
+## submit an one hand long open order at each bid price of TF1512.
+multisubmission(instrumentid="TF1512",orderid=NULL,direction=1,
+                price=orderbook$buybook$price,hands=1,action='open')
 }
-}
-\author{
-Chen
 }
 \seealso{
-\link{ordersubmission} \link{timeoutchasesubmission} \link{timeoutsubmission} \link{chasesubmission}
+\link{ordersubmission} \link{timeoutchasesubmission}
+\link{timeoutsubmission} \link{chasesubmission}
 }
 

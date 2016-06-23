@@ -7,18 +7,18 @@
 randomid(n)
 }
 \arguments{
-\item{n}{id length}
+\item{n}{number of chars}
 }
 \value{
-order id
+character, order id
 }
 \description{
-randomid
+generage a random order id
 }
-\details{
-randomid
+\examples{
+\dontrun{
+## generate a 5 characters' order id
+randomid(5)
 }
-\author{
-Chen
 }
 

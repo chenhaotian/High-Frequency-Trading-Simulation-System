@@ -4,18 +4,25 @@
 \alias{closeall}
 \title{closeall}
 \usage{
-closeall(instrumentid = "qtid", price = NULL, type = "limit")
+closeall(instrumentid = "qtid", price = NULL)
+}
+\arguments{
+\item{instrumentid}{character, specyfing instrument to be closed.}
+
+\item{price}{numeric, specyfing limit close order's price, if NULL, 
+simulator will close the holdings with market orders.}
 }
 \value{
 nothing
 }
 \description{
-closeall
+close all holdings of a specific instrument, if close price is
+not specified, the holdings will be closed with market orders.
 }
 \details{
-closeall
+closeall can only close one instrument at a time
 }
-\author{
-Chen
+\seealso{
+\link{chasecloseall}
 }
 

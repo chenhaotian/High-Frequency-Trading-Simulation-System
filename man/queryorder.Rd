@@ -7,18 +7,27 @@
 queryorder(orderids = NULL)
 }
 \arguments{
-\item{orderid}{orderid to be queried, return all orders if orderid=NULL}
+\item{orderids}{specyfing order ids to be queried, return all orders if
+orderids=NULL, default NULL.}
 }
 \value{
-order
+a data.frame of queuing orders.
 }
 \description{
-queryorder
+get current queuing orders.
 }
 \details{
-queryorder
+return a data.frame of current queuing orders, each row of
+the data.frame representing an order, queryorder will return all of the
+queuing orders if orderid is NULL. when there is no queuing orders,
+queryorder will return a data.frame with 0 rows.
 }
-\author{
-Chen
+\examples{
+\dontrun{
+## get all queuing orders
+queryorder()
+## get all orders that satisfying orderid\%in\%c("order1","order2")
+queryorder(orderids=c("order1","order2"))
+}
 }
 

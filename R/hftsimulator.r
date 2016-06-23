@@ -40,7 +40,7 @@ queryorder <- function(orderids=NULL){
 ##' @export
 querycapital <- function(instrumentids=NULL){
     if(!is.null(instrumentids))
-        return(subset(.tradingstates$capital,instrumentid%in%instrumentids))
+        return(.tradingstates$capital[.tradingstates$capital$instrumentid%in%instrumentids,])
     else
         return(.tradingstates$capital)
 }
@@ -69,12 +69,13 @@ querycapital <- function(instrumentids=NULL){
 ##' from one of "open","close","closetoday","closepreday" and "cancel". amount
 ##' submitted in action='close' can not be greater than the sum of current
 ##' holdings and queuing open hands.
-##' @param timeoutlist logical, specyfing wether to give current order a
+##' @param timeoutlist logical, indicating wether to give current order a
 ##' timeout interval, the length of the interval is specified by timeoutsleep.
 ##' if the order hasn't been executed after a time interval greater than
 ##' timeoutsleep, the order will be canceled.
+##' @param timeoutchase logical, indicating whether to chase order when timeout.
 ##' @param timeoutsleep numeric, specifying the timeout inverval in seconds.
-##' @param chaselist logical, specifying wether to put this order to
+##' @param chaselist logical, indicating wether to put this order to
 ##' auto-chase list. if the order hasn' been executed for a time inverval
 ##' longer than chasesleep, the simulator will cancel this order(if needed),
 ##' then submit a new one with the sampe hands and a price equal to the
@@ -235,6 +236,20 @@ ordersubmission <- function(instrumentid="TF1603",orderid=NULL,direction=1,price
 ##' @param action character, action can take value from one of "open","close",
 ##' "closetoday","closepreday" and "cancel". hands submitted in action='close'
 ##' can not be greater than the sum of current holdings and queuing open hands.
+##' @param timeoutlist logical, specyfing wether to give current order a
+##' timeout interval, the length of the interval is specified by timeoutsleep.
+##' if the order hasn't been executed after a time interval greater than
+##' timeoutsleep, the order will be canceled.
+##' @param timeoutchase logical, indicating whether to chase order when timeout.
+##' @param timeoutsleep numeric, specifying the timeout inverval in seconds.
+##' @param chaselist logical, specifying wether to put this order to
+##' auto-chase list. if the order hasn' been executed for a time inverval
+##' longer than chasesleep, the simulator will cancel this order(if needed),
+##' then submit a new one with the sampe hands and a price equal to the
+##' bid1/ask1 price. the simulator will repeat this action until the original
+##' submitted amount is executed.
+##' @param chasesleep numeric, specifying the time interval between each
+##' execution check. In seconds.
 ##' @return order status code.
 ##' @examples
 ##' \dontrun{
@@ -344,7 +359,7 @@ timeoutsubmission <- function(instrumentid="qtid",orderid=NULL,direction=1,price
 ##' @details chasesubmission is a wrapper of ordersubmission, it act the same
 ##' as ordersubmission(...,timeoutlist=FALSE,chaselist=TRUE).
 ##' @seealso \link{multisubmission} \link{timeoutchasesubmission}
-##' \link{ordersubmissionsubmission} \link{chasesubmission}
+##' \link{ordersubmission} \link{chasesubmission}
 ##' @param instrumentid character, instrument identifier.
 ##' @param orderid character, specifying an unique order id, can be generated
 ##' by randomid().
@@ -522,175 +537,6 @@ closedprofit <- function(instrumentid){
     return(.tradingstates$closedtracker$cash[.tradingstates$closedtracker$instrumentid==instrumentid])
 }
 
-##' @title initializeinstrument
-##'
-##' @description initialize instruments to be traded, including data structure, fee for different actions, data time formant, corresponding multipliers and initial holdings. if you have already set IMLAZY=TRUE in initializestates(), initializeinstrument() will generate plenty of additional objects in order to simplify strategy writting procedure,see 'Details' below.
-##' @param instrument character, specifying the name of a generated environment, all details about the instruments interested will be stored in this environment. see 'Examples' below.
-##' @param instrumentid character, instrument identifier, unique.
-##' @param pXXX integer, specifying index of XXX in 'data source', see 'Details' and 'Examples' for more about 'data source'.
-##' @param fee named numeric, specifying conmissions of different actions, including open, close, closetoday and closepreday. 'cost' in orderhistory and capitalhistory are result calculated by 'fee'. 
-##' @param closeprior character, specifying close priority when specified action='close' in ordersubmission. closeprior can only be one of 'today' and 'preday'. when closeprior='today', ordersubmission will close today's holdings prior than previous days', vise versa. type ?ordersubmission for more details.
-##' @param multiplier numeric, quoted price * multiplier = real price.
-##' @param timeformat character, specifying time format of the data source.
-##' @param endoftheday character, specifying ending time of each trading day, simulator will move holdings to preholdings whenever new tradetime pass through 'endoftheday'.
-##' @return an envrionment in .GlobalEnv containing all the informations specified above. the env's name is specified by parameter 'instrument'.
-##' @details IMLAZY: if IMLAZY=TRUE, initializeinstrument() will generate a bunch of expressions named INSTRUMENTID.ATTRIBUTE.STATE or INSTRUMENTID.ATTRIBUTE. for example, TF1603.longopen.non represents 'TF1603 has no long open order in queue' and TF1603.longopen represents 'all TF1603's long open orders', you can retrive prices of all the long open orders of TF1603 by typing TF1603.longopenX$X'price'. see 'Examples' for more information. part of the expressions are listed below:
-##'          INSTRUMENTID.orders.non
-##'          INSTRUMENTID.orders.exists
-##'          INSTRUMENTID.longopen.exists
-##'          INSTRUMENTID.longopen.non
-##'          INSTRUMENTID.shortopen.exists
-##'          INSTRUMENTID.shortopen.non
-##'          INSTRUMENTID.longclose.exists
-##'          INSTRUMENTID.longclose.non
-##'          INSTRUMENTID.shortclose.exists
-##'          INSTRUMENTID.shortclose.non
-##'          INSTRUMENTID.longholdings.exists
-##'          INSTRUMENTID.longholdings.non
-##'          INSTRUMENTID.shortholdings.exists
-##'          INSTRUMENTID.shortholdings.non
-##'          INSTRUMENTID.holdings.exists
-##'          INSTRUMENTID.holdings.non
-##'          INSTRUMENTID.longopen
-##'          INSTRUMENTID.shortopen
-##'          INSTRUMENTID.longclose
-##'          INSTRUMENTID.shortclose
-##'
-##' data source: any kind of data sorce that can pass market data to strategy and simulator one row at a time.
-##' @seealso \link{initializestates} \link{lazysubmission} \link{ordersubmission}
-##' @export
-##' @examples
-##'\dontrun{
-##' ## wirte capital and order histories to local file, don't sychronize target holdings, don't use simulated trade center and tell the simulator 'I'm lazy'.
-##' initializestates(realtime=FALSE,writeholding=FALSE,tc=FALSE,IMLAZY = TRUE)
-##'
-##' ## generate an environment named 'TF', the instrument to be traded is 'TF1512'
-##' initializeinstrument(instrument = "TF",instrumentid="TF1512",pbuyhands = seq(from = 32,by = 1,length.out = 5),
-##'                      pbuyprice = seq(from = 22,by = 1,length.out = 5),
-##'                      psellhands = seq(from = 37,by = 1,length.out = 5),
-##'                      psellprice = seq(from = 27,by = 1,length.out = 5),
-##'                      ptradetime = 2,plastprice = 4,pvolume = 12,
-##'                      fee = c(long=0,short=0,closetoday=0,closepreday=0),
-##'                      closeprior = "today",
-##'                      timeformat = "%Y-%m-%d %H:%M:%S",
-##'                      multiplier = 10000)
-##'
-##' TF1512 <- function(EXdata){
-##'  CFEupdate(EXdata,TF,'TF1512')
-##' 
-##'  ## IMLAZY=TRUE
-##'  if(TF1512.holdings.non & TF1512.longopen.non)
-##'    ordersubmission(tradetime,"TF1512",orderid="xxx",direction=1,price=0,hands=1,action='open')
-##' 
-##'  ## IMLAZY=FALSE, as a comparison
-##'  ##mycapital <- querycapital(instrumentid="TF1512")
-##'  ##myorders <- queryorders()
-##'  ##if(mycapital$totallongholdings==0 & mycapital$totalshortholdings=0 & nrow(myorders[myorders$instrumentid=='TF1512'&myorders$direction==1&myorders$action=='open',])==0)
-##'  ## ordersubmission(tradetime,"TF1512",orderid="xxx",direction=1,price=0,hands=1,action='open')
-##' }
-##'
-##' ## data srouce
-##' datasource <- getHF_Future(instID = "TF1512", startDate = "2015-10-29", endDate = "2015-10-29")
-##' ## backtest
-##' for(i in 1:nrow(datasource)){TF1512(datasource[i,])}
-##' 
-##' }
-##' @author Chen
-##'
-initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,psellprice,ptradetime,plastprice,pvolume,ppresettleprice,fee=c(long=0,short=0,closetoday=0,closepreday=0),closeprior="today",timeformat="%Y%m%d%H%M%OS",endoftheday="15:15:00.000",multiplier=10000){
-
-    ## IMPORTANT NOTE:
-    ## initialize only one instrument at a time!
-    ## run initializeinstrument() multiple times for multiple instruments
-    
-    ## !!!!!!!!!
-    CASH <- 0
-    
-    ## initialize instrument
-    
-    .INSTRUMENT$instrumentid[[instrumentid]] <- instrumentid
-    
-    .INSTRUMENT$pbuyhands[[instrumentid]] <- pbuyhands
-    .INSTRUMENT$pbuyprice[[instrumentid]] <- pbuyprice
-    ## sellbook:
-    .INSTRUMENT$psellhands[[instrumentid]] <- psellhands
-    .INSTRUMENT$psellprice[[instrumentid]] <- psellprice
-    
-    .INSTRUMENT$ptradetime[[instrumentid]] <- ptradetime
-    .INSTRUMENT$plastprice[[instrumentid]] <- plastprice
-    .INSTRUMENT$pvolume[[instrumentid]] <- pvolume
-    .INSTRUMENT$ppresettleprice[[instrumentid]] <- ppresettleprice
-    
-    .INSTRUMENT$fee[[instrumentid]] <- fee
-    .INSTRUMENT$closeprior[[instrumentid]] <- closeprior
-    
-    .INSTRUMENT$timeformat[[instrumentid]] <- timeformat
-    
-    .INSTRUMENT$endoftheday[[instrumentid]] <- paste("1970-01-01",endoftheday)
-    .INSTRUMENT$tomidnight[[instrumentid]] <- difftime("1970-01-02 00:00:00.000",.INSTRUMENT$endoftheday[[instrumentid]],units = "secs")
-    
-    .INSTRUMENT$multiplier[[instrumentid]] <- multiplier
-    
-    .INSTRUMENT$pre[[instrumentid]] <- 0
-    .INSTRUMENT$current[[instrumentid]] <- 0
-    
-    ## new day tracker
-    .tradingstates$startoftheday[instrumentid] <- FALSE
-    
-    ## add zero holding tracker
-    .tradingstates$closedtracker <- unique(rbind(
-        .tradingstates$closedtracker,
-        data.frame(instrumentid=instrumentid,cash=CASH,stringsAsFactors=FALSE)
-    ))
-    
-    
-    ## initialize trade center
-    .tradingstates$justchanged[instrumentid] <- FALSE
-    .tradingstates$lastchange[instrumentid] <- "1970-01-01 00:00:01.300"
-    
-    ## initialize instrument capital
-    if(nrow(.tradingstates$capital[.tradingstates$capital$instrumentid==instrumentid,])==0){
-        .tradingstates$capital <- rbind(
-            .tradingstates$capital,
-            data.frame(
-                instrumentid=instrumentid,
-                longholdingstoday=0, shortholdingstoday=0,
-                longholdingspreday=0,shortholdingspreday=0,
-                totallongholdings=0,totalshortholdings=0,
-                cash=CASH,stringsAsFactors=FALSE
-                )
-            )
-    }
-    else{
-        .tradingstates$capital$longholdingstoday[.tradingstates$capital$instrumentid==instrumentid] <- 0
-        .tradingstates$capital$shortholdingstoday[.tradingstates$capital$instrumentid==instrumentid] <- 0
-        .tradingstates$capital$longholdingspreday[.tradingstates$capital$instrumentid==instrumentid] <- 0
-        .tradingstates$capital$shortholdingspreday[.tradingstates$capital$instrumentid==instrumentid] <- 0
-        .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid] <- 0
-        .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid] <- 0
-        .tradingstates$capital$cash[.tradingstates$capital$instrumentid==instrumentid] <- CASH
-    }
-    
-    ## initialize target holding(after read holding) for trade center
-    .tradingstates$th <- rbind(.tradingstates$th,
-                               data.frame(instrumentid=instrumentid,
-                                          longholding=.tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid],
-                                          shortholding=.tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid],
-                                          stringsAsFactors = FALSE))
-    .tradingstates$th <- unique(.tradingstates$th)
-    if(nrow(.tradingstates$th)==0){
-        stop("error while generating target holdings")
-    }
-    
-    ## I'm lazy?
-    if(.tradingstates$IMLAZY){
-        .lazyexpressions(instrumentid=instrumentid,type = "specific")
-        .lazyexpressions(instrumentid=instrumentid,
-                         ninstruments = length(.INSTRUMENT$instrumentid),
-                         type = "general")
-    }
-    
-}
 
 ##' @title randomid
 ##' @description generage a random order id
@@ -701,6 +547,7 @@ initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,pse
 ##' ## generate a 5 characters' order id
 ##' randomid(5)
 ##' }
+##' @importFrom stats runif
 ##' @export
 randomid <- function(n){paste(letters[ceiling(runif(n,0,26))],collapse = "")}
 
@@ -736,6 +583,7 @@ isnewday <- function(instrumentid){
 ##' perfectexecution(instrumentid="TF1603",orderid='xxx',
 ##'                 direction=1,price=99,hands=1,action="open")
 ##' }
+##' @importFrom methods is
 ##' @export
 perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,action){
 
@@ -775,6 +623,10 @@ perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,acti
 ##' @title closeall
 ##' @description close all holdings of a specific instrument, if close price is
 ##' not specified, the holdings will be closed with market orders.
+##' @seealso \link{chasecloseall}
+##' @param instrumentid character, specyfing instrument to be closed.
+##' @param price numeric, specyfing limit close order's price, if NULL, 
+##' simulator will close the holdings with market orders.
 ##' @details closeall can only close one instrument at a time
 ##' @return nothing
 ##' @export
@@ -881,9 +733,6 @@ cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL
 ##' from one of "open","close","closetoday","closepreday"
 ##' @param pricemin numeric, specifying a filter for price lower limit.
 ##' @param pricemax numeric, specifying a filter for price upper limit.
-##' @param orderid character, specifying the set of orderids to be canceled.
-##' NOTE: if orderid is not null, cancelall will disregard any other filters
-##' and cancel orders only by orderid.
 ##' @param newprice numeric, new order price, will replace with a market order
 ##' when newprice=0.
 ##' @return nothing
@@ -928,7 +777,6 @@ replaceall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NUL
     return()
 }
 
-
 ##' @title lazysubmission
 ##' @description submit a target holding, simulator will cancel all irrevelant
 ##' orders and chase bid1 or ask1 price automatically until the target holding
@@ -966,12 +814,27 @@ lazysubmission <- function(instrumentid,longholding=NULL,shortholding=NULL){
 
 }
 
-## cancelallother cancel all other orders other than specific levels
-## cancelprime cancel all orders with higher priority price
-## cancelsub cancel all orders with lower priority price
-## cancelnotinthebook cancel orders not in orderbook
+##' @title submitmultilevelopen
+##' @description submit multiple open orders while cancel all other orders
+##' satisfying the cancel conditions, cancel conditions are specified by
+##' cancelallother, cancelprime,  cancelsub and cancelnotinthebook.
+##' @seealso  \link{multisubmission} \link{cancelall}
+##' @param instrumentid character, instrument identifier.
+##' @param LEVELS integer, specifying postions in order book. Orders will be
+##' submmited to these positions.
+##' @param hands integer, specifying amount to be submitted.
+##' @param DIRECTION integer, specifying trading direction. 1 for long,
+##' -1 for short.
+##' @param  cancelallother, logical, indicating wehter or not  cancel all other
+##' orders that satisfying in the order book but with different prices.
+##' @param  cancelprime cancel all orders with higher priority price
+##' @param  cancelsub cancel all orders with lower priority price
+##' @param  cancelnotinthebook cancel orders not in orderbook
+##' @return nothing.
+##' @importFrom stats na.omit
+##' @export
 submitmultilevelopen <- function(instrumentid,LEVELS=c(1,2),hands=1,cancelallother=FALSE,cancelprime=FALSE,cancelsub=FALSE,DIRECTION=1,cancelnotinthebook=FALSE){
-    LIMITS <- subset(.tradingstates$orders,price!=0&direction==DIRECTION)
+    LIMITS <- .tradingstates$orders[.tradingstates$orders$price!=0&.tradingstates$orders$direction==DIRECTION,]
     if(DIRECTION==1){
         orderbook <- .INSTRUMENT$orderbook[[instrumentid]]$buybook
     }
@@ -1023,6 +886,17 @@ submitmultilevelopen <- function(instrumentid,LEVELS=c(1,2),hands=1,cancelalloth
     
 }
 
+##' @title chasecloseall
+##' @description chase close all holdings of a specific instrument.
+##' @seealso \link{closeall}
+##' @details chasecloseall can only close one instrument at a time, simulator
+##' will recheck if the order price is equal to current bid1 or ask1 price every
+##' chasesleep seconds, if not, simulator will cancel it and submit a new one.
+##' This action will be repeated until all specified holdings are executed.
+##' @param instrumentid character, specyfing instrument to be closed.
+##' @param chasesleep numeric, specyfing order chasing interval.
+##' @return nothing
+##' @export
 chasecloseall <- function(instrumentid,chasesleep=1){
     ## long holdings
     LH <- .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid]
@@ -1082,20 +956,91 @@ BSO <- function(orderbook,preorderbook,bsi){
 }
 
 
-## dataformat <- list(pbuyhands = seq(from = 32,by = 1,length.out = 5),
-## pbuyprice = seq(from = 22,by = 1,length.out = 5),
-## psellhands = seq(from = 37,by = 1,length.out = 5),
-## psellprice = seq(from = 27,by = 1,length.out = 5),
-## ptradetime = 2,plastprice = 4,pvolume = 12,
-## ppresettleprice=8)
 
-## ...: other parameters passed to stg
-## datalist must be a list of data.frame(s) or a data.frame.
-## formatlist is either a list of data format specifycation or a list of lists of specifications.
-## instrumentids: instrument identifier
+##' @title S
+##' @description shortcut
+##' @param instrumentid character, instrument identifier.
+##' @param attr name or call
+##' @export
+S <- function(instrumentid,attr){
+    attr <- substitute(attr)
+    if(!is.character(attr)) attr <- deparse(attr)
+    switch(attr,
+           "orders.non" = nrow(.tradingstates$orders[.tradingstates$orders$instrumentid=="a",])==0,
+           "orders.exist" = nrow(.tradingstates$orders[.tradingstates$orders$instrumentid=="a",])!=0,
+           "longopen" = .tradingstates$orders[.tradingstates$orders$action=="open" & .tradingstates$orders$direction==1 &.tradingstates$orders$instrumentid==instrumentid,],
+           "longopen.non" = nrow(.tradingstates$orders[.tradingstates$orders$action=="open" & .tradingstates$orders$direction==1 &.tradingstates$orders$instrumentid==instrumentid,])==0,
+           "longopen.exist" = nrow(.tradingstates$orders[.tradingstates$orders$action=="open" & .tradingstates$orders$direction==1 &.tradingstates$orders$instrumentid==instrumentid,])!=0,
+           "shortopen" = .tradingstates$orders[.tradingstates$orders$action=="open"&.tradingstates$orders$direction==-1 &.tradingstates$orders$instrumentid==instrumentid,],
+           "shortopen.non" = nrow(.tradingstates$orders[.tradingstates$orders$action=="open"&.tradingstates$orders$direction==-1 &.tradingstates$orders$instrumentid==instrumentid,])==0,
+           "shortopen.exist" = nrow(.tradingstates$orders[.tradingstates$orders$action=="open"&.tradingstates$orders$direction==-1 &.tradingstates$orders$instrumentid==instrumentid,])!=0,
+           "longclose" = .tradingstates$orders[.tradingstates$orders$action=="close"&.tradingstates$orders$direction==1 &.tradingstates$orders$instrumentid==instrumentid,],
+           "longclose.non" = nrow(.tradingstates$orders[.tradingstates$orders$action=="close"&.tradingstates$orders$direction==1 &.tradingstates$orders$instrumentid==instrumentid,])==0,
+           "longclose.exist" = nrow(.tradingstates$orders[.tradingstates$orders$action=="close"&.tradingstates$orders$direction==1 &.tradingstates$orders$instrumentid==instrumentid,])!=0,
+           "shortclose" = .tradingstates$orders[.tradingstates$orders$action=="close"&.tradingstates$orders$direction==-1 &.tradingstates$orders$instrumentid==instrumentid,],
+           "shortclose.non" = nrow(.tradingstates$orders[.tradingstates$orders$action=="close"&.tradingstates$orders$direction==-1 &.tradingstates$orders$instrumentid==instrumentid,])==0,
+           "shortclose.exist" = nrow(.tradingstates$orders[.tradingstates$orders$action=="close"&.tradingstates$orders$direction==-1 &.tradingstates$orders$instrumentid==instrumentid,])!=0,
+           "holdings.exist" = .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid] >0 | .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid]<0,
+           "holdings.non" = .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid] ==0 & .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid]==0,
+           "longholdings.exist" = .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid]>0,
+           "longholdings.non" = .tradingstates$capital$totallongholdings[.tradingstates$capital$instrumentid==instrumentid]==0,
+           "shortholdings.exist" = .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid]<0,
+           "shortholdings.non" = .tradingstates$capital$totalshortholdings[.tradingstates$capital$instrumentid==instrumentid]==0
+           )
+}
+
+
+##' @title HFTsimulator
+##' @description high-frequency trading simulator.
+##' @details
+##' Initialize simulator states, including simulation back ground
+##' functionalities and many ohter simulator related parameters. All
+##' states related variables are saved in an environment named
+##' '.tradingstates'. Queuing orders and capital state will be saved and
+##' kept updated in tradingstates during simulation. There are two improtant
+##' data.frames stored in this envrionment, 'orders' and 'capital'. All
+##' current queuing orders will be stored as one rows in orders during
+##' simulation. if there is no queuing order, orders will be a data.frame
+##' with 0 row. each instruments' capital state will be stored as one row in
+##' capital. capital has at least one row. \code{queryorder()} and
+##' \code{qureycapital()} can be used inside strategy function to fetch orders
+##' and capital from .tradingstates.
+##' @seealso \link{lazysubmission} \link{cancelall} \link{queryorder}
+#' \link{querycapital} \link{meanopen} \link{holdingsprofit}
+##' @param stg function, strategy function.
+##' @param ... parameters passed to stg.
+##' @param datalist data.frame or list, specifying taq data used in the
+##' simulation. datalist must be a list of data.frame(s) or a data.frame.
+##' @param formatlist list, specifying taq data format, formatlist is either a
+##' list of data format specifycation or a list of lists of specifications.
+##' @param instrumentids character, spefifying instruments to be traded.
+
+##' @param tc logical, indicating wehter to use a simulated tradecenter. when
+##' tc=TRUE, only lazysubmission can be used as submit function in stg. Defalut
+##' FALSE.
+##' @param Sleep numeric, idle time length of simulated tradecenter, measured
+##' in seconds, default 1.
+##' @param DIGITSSECS integer, specifying second digits, default 3.
+##' @param septraded logical, indicating wether to record traded orders
+##' separately.
+##' @param unclosed logical, indicating wether to track all unclosed orders,
+##' set unclosed=TRUE when you need to calculate mean open price and open
+##' profit. Default TRUE.
+##' @param closed logical, indicating wether to track all zero holding states,
+##' set closed=TRUE when you need to calculate close profit, default TRUE.
+##' @param interdaily logical, indicating wether to support interdaily strategies,
+##' most of the time MM strategies are appiled in intraday situations,
+##' set it to TRUE only when you know exactly what you are doing. Defalut FALSE.
+##' @param verboselimitpriors logical, indicating wether to record all prior 
+##' limit orders' informations. if verboselimitpriors=TRUE,  simulator will
+##' contatenate all limitpriors in a list named 'verbosepriors'. Default TRUE.
+##' @return a list containing all kinds of histories and current states.
+##' @importFrom stats runif
+##' @importFrom utils setTxtProgressBar txtProgressBar
+##' @importFrom methods is
+##' @export
 HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
-                         progressbar=TRUE,
-                         tc=FALSE,Sleep=1,IMLAZY=FALSE,DIGITSSECS=3,STRINGSASFACTORS=FALSE,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE,
+                         tc=FALSE,Sleep=1,DIGITSSECS=3,septraded=FALSE,unclosed=TRUE,closed=TRUE,interdaily=FALSE,
                          verboselimitpriors=TRUE){
     ## strategy function check
     if(!is(stg,"function")){
@@ -1115,7 +1060,7 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     }
     ## data format check
     ## put all dataformat in a list, the list is of the same length of instrumetids
-    requiredformat <- c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume","ppresettleprice")
+    requiredformat <- c("pbuyhands","pbuyprice","psellhands","psellprice","ptradetime","plastprice","pvolume")
     if(all(requiredformat%in%names(formatlist))){
         eval(parse(text = paste("formatlist <- list(",paste(paste(instrumentids,"=formatlist"),collapse = ","),")")))
     }else if(all(requiredformat%in%names(formatlist[[1]]))){
@@ -1184,7 +1129,7 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     
     ## environment settings
     options(digits.secs=DIGITSSECS)
-    options(stringsAsFactors = STRINGSASFACTORS)
+    options(stringsAsFactors = FALSE)
     
     ## initialize simulator state
     .tradingstates$tc <- tc             #trade-center
@@ -1193,8 +1138,6 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
     .tradingstates$Sleep <- Sleep           #trade-center idle time
     .tradingstates$closed <- closed         #recored all closed orders
     .tradingstates$unclosed <- unclosed     #track all unclosed orders
-    .tradingstates$IMLAZY <- IMLAZY
-    if(IMLAZY) .lazyfunctions()
 
     .tradingstates$orders <- data.frame(
         instrumentid=character(),
@@ -1294,7 +1237,7 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
             dataformat$multiplier=1
         }
 
-        initializeinstrument(instrumentid=instrumentid,
+        .initializeinstrument(instrumentid=instrumentid,
                              pbuyhands=dataformat$pbuyhands,
                              pbuyprice=dataformat$pbuyprice,
                              psellhands=dataformat$psellhands,
@@ -1302,7 +1245,6 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
                              ptradetime=dataformat$ptradetime,
                              plastprice=dataformat$plastprice,
                              pvolume=dataformat$pvolume,
-                             ppresettleprice=dataformat$ppresettleprice,
                              fee=dataformat$fee,
                              closeprior=dataformat$closeprior,
                              timeformat=dataformat$timeformat,
@@ -1312,9 +1254,7 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
 
     cat("done\n")
 
-    if(progressbar){
-        pb <- txtProgressBar(min = 1,max = nrow(datalist),style = 3)
-    }
+    pb <- txtProgressBar(min = 1,max = nrow(datalist),style = 3)
     ## initialize tmp vars
     tradetime <- character(1)
     lastprice <- numeric(1)
@@ -1329,10 +1269,11 @@ HFTsimulator <- function(stg,...,instrumentids,datalist,formatlist,
         if(verboselimitpriors){
             .verboselimitpriors()
         }
-        if(progressbar){
-            setTxtProgressBar(pb,i)
-        }
+        setTxtProgressBar(pb,i)
     }
     cat("\n")
-    ## invisible(list(orders=.tradingstates$orderhistory,capitals=.tradingstates$capitalhistory))
+    invisible(list(orderhistory=.tradingstates$orderhistory,capitalhistory=.tradingstates$capitalhistory,queuingorders=.tradingstates$orders,capital=.tradingstates$capital,verbosepriors=.tradingstates$verbosepriors))
+
 }
+
+

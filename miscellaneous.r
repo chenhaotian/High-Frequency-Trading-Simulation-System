@@ -11,14 +11,14 @@ library(ggplot2)
 
 datamanipulation <- function(instrumentdata,instrumentid){
 
-    timeformat <- .INSTRUMENT$timeformat[[instrumentid]]
-    plastprice <- .INSTRUMENT$plastprice[[instrumentid]]
-    ptradetime <- .INSTRUMENT$ptradetime[[instrumentid]]
-    pvolume <- .INSTRUMENT$pvolume[[instrumentid]]
-    pbuyhands <- .INSTRUMENT$pbuyhands[[instrumentid]]
-    pbuyprice <- .INSTRUMENT$pbuyprice[[instrumentid]]
-    psellhands <- .INSTRUMENT$psellhands[[instrumentid]]
-    psellprice <- .INSTRUMENT$psellprice[[instrumentid]]
+    timeformat <- HFT:::.INSTRUMENT$timeformat[[instrumentid]]
+    plastprice <- HFT:::.INSTRUMENT$plastprice[[instrumentid]]
+    ptradetime <- HFT:::.INSTRUMENT$ptradetime[[instrumentid]]
+    pvolume <- HFT:::.INSTRUMENT$pvolume[[instrumentid]]
+    pbuyhands <- HFT:::.INSTRUMENT$pbuyhands[[instrumentid]]
+    pbuyprice <- HFT:::.INSTRUMENT$pbuyprice[[instrumentid]]
+    psellhands <- HFT:::.INSTRUMENT$psellhands[[instrumentid]]
+    psellprice <- HFT:::.INSTRUMENT$psellprice[[instrumentid]]
 
     ## basic information and time format
     instrumentdata <- instrumentdata[,c(ptradetime,plastprice,pvolume,pbuyprice,pbuyhands,psellprice,psellhands)]
@@ -38,7 +38,7 @@ datamanipulation <- function(instrumentdata,instrumentid){
 ## 1.2 calculate profit and loss
 pnl <- function(instrumentdata,capitalhistory,instrumentid){
 
-    multiplier <- .INSTRUMENT$multiplier[[instrumentid]]
+    multiplier <- HFT:::.INSTRUMENT$multiplier[[instrumentid]]
 
     ## close profit
     ## closeprofit <- unique(capitalhistory[capitalhistory$totallongholdings==0&capitalhistory$totalshortholdings==0,c("tradetime","cash")])
@@ -282,12 +282,12 @@ tradesummary <- function(instrumentdata,instrumentid="qtid",limitorders=NULL,sta
     
     ## get curren instrument's order and capital history
 
-    orders <- .tradingstates$orderhistory[.tradingstates$orderhistory$instrumentid==instrumentid,]
+    orders <- HFT:::.tradingstates$orderhistory[HFT:::.tradingstates$orderhistory$instrumentid==instrumentid,]
     if(!is.null(starttime) & !is.null(endtime)){
         hfm <- strftime(as.POSIXct(orders$tradetime),"%H:%M:%OS")
         orders <- orders[hfm>=starttime & hfm<=endtime,]
     }
-    capital <- .tradingstates$capitalhistory[.tradingstates$capitalhistory$instrumentid==instrumentid,]
+    capital <- HFT:::.tradingstates$capitalhistory[HFT:::.tradingstates$capitalhistory$instrumentid==instrumentid,]
     if(!is.null(starttime) & !is.null(endtime)){
         hfm <- strftime(as.POSIXct(capital$tradetime),"%H:%M:%OS")
         capital <- capital[hfm>=starttime & hfm<=endtime,]
@@ -339,7 +339,7 @@ tradesummary <- function(instrumentdata,instrumentid="qtid",limitorders=NULL,sta
 }
 ## check the details of a specific limit order
 checklimit <- function(instrumentdata,orderid){
-    currentorder <- head(.tradingstates$orderhistory[.tradingstates$orderhistory$orderid==orderid,],1)
+    currentorder <- head(HFT:::.tradingstates$orderhistory[HFT:::.tradingstates$orderhistory$orderid==orderid,],1)
     if(nrow(currentorder)==0){stop("can't find ",orderid)}
     if(currentorder$price==0)(stop("must be a limit order!"))
     instrumentdata <- datamanipulation(instrumentdata,currentorder$instrumentid)
@@ -348,11 +348,11 @@ checklimit <- function(instrumentdata,orderid){
     ## time mapping
 
     ## locate current order and corresponding market data
-    if(is.null(.tradingstates$verbosepriors)){warning("can't find any verbose information")}
-    startandend <- range(.tradingstates$orderhistory$tradetime[.tradingstates$orderhistory$orderid==orderid])
-    timeidx <- names(.tradingstates$verbosepriors)
+    if(is.null(HFT:::.tradingstates$verbosepriors)){warning("can't find any verbose information")}
+    startandend <- range(HFT:::.tradingstates$orderhistory$tradetime[HFT:::.tradingstates$orderhistory$orderid==orderid])
+    timeidx <- names(HFT:::.tradingstates$verbosepriors)
     timeidx <- timeidx>=startandend[1] & timeidx<=startandend[2]
-    currentverbose <- .tradingstates$verbosepriors[timeidx]
+    currentverbose <- HFT:::.tradingstates$verbosepriors[timeidx]
     currentdata <- instrumentdata[instrumentdata$tradetime>=startandend[1] & instrumentdata$tradetime<=startandend[2],]
     ## filter all records without updates
     updateidx <- c(TRUE,
@@ -422,7 +422,7 @@ checklimit <- function(instrumentdata,orderid){
     }
 
     ## 3.5 order information
-    currentstatus <- .tradingstates$orderhistory[.tradingstates$orderhistory$tradetime%in%names(currentverbose)&.tradingstates$orderhistory$orderid==orderid,]
+    currentstatus <- HFT:::.tradingstates$orderhistory[HFT:::.tradingstates$orderhistory$tradetime%in%names(currentverbose)&HFT:::.tradingstates$orderhistory$orderid==orderid,]
     if(nrow(currentdata)>20){
         currentstatus$tradetime <- as.POSIXct(currentstatus$tradetime)
     }

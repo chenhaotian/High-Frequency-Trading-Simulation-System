@@ -5,18 +5,40 @@
 \title{perfectexecution}
 \usage{
 perfectexecution(instrumentid, orderid = "xxx", direction, price, hands,
-  action, type = "limit")
+  action)
+}
+\arguments{
+\item{instrumentid}{character, instrument identifier.}
+
+\item{orderid}{character, specifying an unique order id, can be generated
+by randomid().}
+
+\item{direction}{integer, specifying trading direction. 1 for long,
+-1 for short.}
+
+\item{price}{numeric, specifiying order pirce.}
+
+\item{hands}{integer, specifying amount to be submitted.}
+
+\item{action}{character, specifying submit action, action can take value
+from one of "open","close","closetoday","closepreday" and "cancel". amount
+submitted in action='close' can not be greater than the sum of current
+holdings and queuing open hands.}
 }
 \value{
-nothing
+nothing.
 }
 \description{
-perfectexecution
+execute and order immediatele with a specified price, without
+going through the simulation system. Can be used to comparing simulated
+strategy with a perfect situation.
 }
-\details{
-perfectexecution
+\examples{
+\dontrun{
+## submit an open order, buy 1 hand of TF1603 at price 99
+## the order will be executed immediately at price 99
+perfectexecution(instrumentid="TF1603",orderid='xxx',
+                direction=1,price=99,hands=1,action="open")
 }
-\author{
-Chen
 }
 
