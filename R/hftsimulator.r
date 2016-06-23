@@ -692,40 +692,52 @@ initializeinstrument <- function(instrumentid,pbuyhands,pbuyprice,psellhands,pse
     
 }
 
-##' randomid
-##'
-##' randomid
 ##' @title randomid
-##' @param n id length
-##' @return order id
-##' @export 
-##' @author Chen
-##'
+##' @description generage a random order id
+##' @param n number of chars
+##' @return character, order id
+##' @examples
+##' \dontrun{
+##' ## generate a 5 characters' order id
+##' randomid(5)
+##' }
+##' @export
 randomid <- function(n){paste(letters[ceiling(runif(n,0,26))],collapse = "")}
 
-##' is new day?
-##'
-##' is new day?
-##' @title is.newday
+##' @title isnewday
+##' @description check if current instrument's data comes from a new day.
 ##' @param instrumentid character, instrument identifier, unique.
-##' @return logical, indication wether current data come from a new trading day
+##' @return logical, indication wether current data come from a new trading day.
 ##' @export 
-##' @author Chen
-##'
-is.newday <- function(instrumentid){
+isnewday <- function(instrumentid){
     return(.tradingstates$startoftheday[instrumentid])
 }
 
-
-##' perfectexecution
-##'
-##' perfectexecution
 ##' @title perfectexecution
-##' @return nothing
-##' @export 
-##' @author Chen
-##'
-perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,action,type="limit"){
+##' @description execute and order immediatele with a specified price, without
+##' going through the simulation system. Can be used to comparing simulated
+##' strategy with a perfect situation.
+##' @param instrumentid character, instrument identifier.
+##' @param orderid character, specifying an unique order id, can be generated
+##' by randomid().
+##' @param direction integer, specifying trading direction. 1 for long,
+##' -1 for short.
+##' @param price numeric, specifiying order pirce.
+##' @param hands integer, specifying amount to be submitted.
+##' @param action character, specifying submit action, action can take value
+##' from one of "open","close","closetoday","closepreday" and "cancel". amount
+##' submitted in action='close' can not be greater than the sum of current
+##' holdings and queuing open hands.
+##' @return nothing.
+##' @examples
+##' \dontrun{
+##' ## submit an open order, buy 1 hand of TF1603 at price 99
+##' ## the order will be executed immediately at price 99
+##' perfectexecution(instrumentid="TF1603",orderid='xxx',
+##'                 direction=1,price=99,hands=1,action="open")
+##' }
+##' @export
+perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,action){
 
     tradetime=.tradingstates$currenttradetime
 
@@ -733,10 +745,6 @@ perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,acti
     if(is(direction,"character") | any(!direction%in%c(-1,1))) stop("direction must be numeric or integer of value  1 or -1!")
     if(any(price<=0)) stop("price must be greater than 0!")
     if(any(!action%in%c("open","close"))) stop("action can only be open or close!")
-    ## if(missing(type))
-    ## stop("order type not found!")
-    if(any(!type%in%c("limit","market"))) stop("type must be one of limit or market!")
-    if(length(unique(type))>1) stop("can only submitt one type of orders!")
     
     ## multiple orders
     tryCatch(orders <- data.frame(instrumentid=instrumentid,direction=direction,price=price,hands=hands,action=action,stringsAsFactors = FALSE),
@@ -764,29 +772,26 @@ perfectexecution<-function(instrumentid,orderid="xxx",direction,price,hands,acti
     
 }
 
-##' closeall
-##'
-##' closeall
 ##' @title closeall
+##' @description close all holdings of a specific instrument, if close price is
+##' not specified, the holdings will be closed with market orders.
+##' @details closeall can only close one instrument at a time
 ##' @return nothing
 ##' @export
-##' @author Chen
-##'
-closeall <- function(instrumentid="qtid",price=NULL,type="limit"){
+closeall <- function(instrumentid="qtid",price=NULL){
     
     capital <- querycapital(instrumentids = instrumentid)
     if(nrow(capital)==0){
         warning(paste(instrumentid,"not found!"))
         return()
     }
-    if(nrow(capital)>1){
+    if(length(instrumentid)>1){
         stop("close more than one instruments!")
     }
     if(capital$totallongholdings<=0 & capital$totalshortholdings>=0){
-        warning("no holdings to be closed")
+        print("no holdings to be closed")
         return()
     }
-    match.arg(type,c("limit","market"))
 
     ## ordersubmission
     if(capital$totallongholdings!=0)
@@ -799,27 +804,29 @@ closeall <- function(instrumentid="qtid",price=NULL,type="limit"){
     return()
 }
 
-
-##' cancelall
-##' 
-##'  cancel all satisfied orders
-##' 
-##' @param instrumentid character, specifying a filter for instrument identifiers.
-##' @param direction integer, specifying a filter for trading directions. 1 for long and -1 for short.
+##' @title cancelall
+##' @description cancel all satisfied orders
+##' @details cancelall will cancel all orders satisfying user specified
+##' filter conditions, a fillter won't be considered when it is NULL.
+##' @seealso  \link{replaceall}
+##' @param instrumentid character, specifying a filter for instrument
+##' identifiers.
+##' @param direction integer, specifying a filter for trading directions.
+##' 1 for long and -1 for short.
+##' @param action character, specifying a filter for actions, can take value
+##' from one of "open","close","closetoday","closepreday"
 ##' @param pricemin numeric, specifying a filter for price lower limit.
 ##' @param pricemax numeric, specifying a filter for price upper limit.
-##' @param action character, specifying a filter for actions, can take value from one of "open","close","closetoday","closepreday"
-##' @param orderid character, specifying the set of orderids to be canceled. NOTE: if orderid is not null, cancelall will disregard any other filters and cancel orders only by orderid 
+##' @param orderid character, specifying the set of orderids to be canceled.
+##' NOTE: if orderid is not null, cancelall will disregard any other filters
+##' and cancel orders only by orderid.
 ##' @return nothing
-##' @seealso  \link{replaceall}
-##' @export
 ##' @examples
-##'\dontrun{
+##' \dontrun{
 ##' ## cancel all orders satisfy direction==-1
-##' cancelall(tradetime,direction==-1)
+##' cancelall(direction==-1)
 ##' }
-##' @author Chen
-##'
+##' @export
 cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL,pricemax=NULL,orderid=NULL){
     orders <- .tradingstates$orders
     if(nrow(orders)==0){
@@ -862,27 +869,32 @@ cancelall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL
     return()
 }
 
-##' replaceall
-##' 
-##'  replace all satisfied orders with one new order which has a new price and a new hands equal to the cumulated hands of orders replaced.
-##' 
-##' @param tradetime character, time in current tick.
-##' @param instrumentid character, specifying a filter for instrument identifier.
-##' @param direction integer, specifying a filter for trading direction. 1 for long and -1 for short.
+##' @title replaceall
+##' @description replace all satisfied orders with one new one, which has a new
+##' price and a hands equal to the cumulated hands of orders replaced.
+##' @seealso  \link{cancelall}
+##' @param instrumentid character, specifying a filter for instrument
+##' identifiers.
+##' @param direction integer, specifying a filter for trading directions.
+##' 1 for long and -1 for short.
+##' @param action character, specifying a filter for actions, can take value
+##' from one of "open","close","closetoday","closepreday"
 ##' @param pricemin numeric, specifying a filter for price lower limit.
 ##' @param pricemax numeric, specifying a filter for price upper limit.
-##' @param action character, specifying a filter for actions, can take value from one of "open","close","closetoday","closepreday". 
-##' @param newprice numeric, new order price, will replace with a market order when newprice=0
+##' @param orderid character, specifying the set of orderids to be canceled.
+##' NOTE: if orderid is not null, cancelall will disregard any other filters
+##' and cancel orders only by orderid.
+##' @param newprice numeric, new order price, will replace with a market order
+##' when newprice=0.
 ##' @return nothing
-##' @seealso  \link{cancelall}
-##' @export
 ##' @examples
 ##'\dontrun{
-##' ## find all orders satisfy direction==-1 and action=='open' and price <=101, replace them with a new order with price 100.01.
-##' replaceall(tradetime,"TF1512",direction=-1,action='open',pricemax=101,newprice=100.01)
+##' ## find all orders satisfy direction==-1 and action=='open' and
+##' ## price <=101, replace them with a new order with price 100.01.
+##' replaceall(tradetime,"TF1512",direction=-1,action='open',
+##'            pricemax=101,newprice=100.01)
 ##' }
-##' @author Chen
-##'
+##' @export
 replaceall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NULL,pricemax=NULL,newprice=NULL){
     ## cancel old orders
     orders <- .tradingstates$orders
@@ -917,23 +929,22 @@ replaceall <- function(instrumentid=NULL,direction=NULL,action=NULL,pricemin=NUL
 }
 
 
-##' lazysubmission
-##'
-##'   submit target holdings, trade center will cancel all irrevelant orders and chase bid1 or ask1 price automatically to achieve target holdings. this function can only be used when set tc=TRUE in initializestates()
-##' 
+##' @title lazysubmission
+##' @description submit a target holding, simulator will cancel all irrevelant
+##' orders and chase bid1 or ask1 price automatically until the target holding
+## is achieved. This function can only be used when set tc=TRUE in HFTsimualtor.
+##' @seealso  \link{HFTsimulator}
 ##' @param instrumentid character, instrument identifier
-##' @param longholding integer, specifying target long holdings of 'instrumentid', longholding >=0
-##' @param shortholding integer, specifying target short holdings of 'instrumentid', shortholding <= 0
+##' @param longholding integer, specifying target long holdings of
+##' 'instrumentid', longholding must be greater than or equal to 0.
+##' @param shortholding integer, specifying target short holdings of
+##' 'instrumentid', shortholding must be less than or equal to 0.
 ##' @return nothing
-##' @export
-##' @seealso  \link{initializestates}
 ##' @examples
 ##'\dontrun{
-##' 
-##'  lazysubmission(tradetime,"TF1512",longholding=5,shortholding=-3)
+##'  lazysubmission("TF1512",longholding=5,shortholding=-3)
 ##' }
-##' @author Chen
-##'
+##' @export
 lazysubmission <- function(instrumentid,longholding=NULL,shortholding=NULL){
     
     tradetime=.tradingstates$currenttradetime
