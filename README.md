@@ -1,7 +1,11 @@
 A high-frequency trading simulation system in R
 =======
-A high-frequency trading simulation system based on R
+A high-frequency trading simulation system in R
 
- + notes about time format
- + delete initializeTF after record all the positions
+##### Installation
+```R
+library(devtools)
+install_github("chenhaotian/High-Frequency-Trading-Simulation-System")
+```
+##### Demo
 
