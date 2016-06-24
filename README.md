@@ -7,5 +7,5 @@ A high-frequency trading simulation system in R
 library(devtools)
 install_github("chenhaotian/High-Frequency-Trading-Simulation-System")
 ```
-##### Demo
+##### Getting Started
 
