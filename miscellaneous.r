@@ -1,7 +1,15 @@
-library(grid)
-library(plyr)
-library(zoo)                            #na.locf
-library(ggplot2)
+pkgLoad <- function(x){
+    if (!require(x,character.only = TRUE)){
+        install.packages(x,dep=TRUE)
+        if(!require(x,character.only = TRUE)) stop("Package not found")
+    }
+    library(x,character.only = TRUE)
+}
+
+pkgLoad("grid")
+pkgLoad("plyr")
+pkgLoad("zoo")                            #na.locf
+pkgLoad("ggplot2")
 
 ## analysing tools
 ## 1.specific functions------------------

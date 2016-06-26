@@ -89,7 +89,9 @@ TF1603  <- function(OMAX){
 
 HFTsimulator(stg = TF1603,OMAX=2,instrumentids = "TF1603",datalist = TFtaq,formatlist = TFformat,verboselimitpriors = TRUE)
 
-source("miscellaneous.r")
+
+## source from github
+source_url("https://raw.githubusercontent.com/chenhaotian/High-Frequency-Trading-Simulation-System/master/miscellaneous.r")
 
 res <- tradesummary(TFtaq,"TF1603",endtime = "11:30:00.000")
 
