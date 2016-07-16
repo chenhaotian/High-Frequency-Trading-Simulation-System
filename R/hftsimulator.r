@@ -926,6 +926,19 @@ chasecloseall <- function(instrumentid,chasesleep=1){
 ## lastprice,volume : current last price and volume
 ## AGGREGATE: indicating return cumulate value or not
 ## return a matirx with two columes.
+
+##' @title BIS
+##' @description market order flow.
+##' @details extract market order flow form give transaction data.
+##' @param lastprice last trading price.
+##' @param bid1 previous orderbook's bid1 price.
+##' @param ask1 previous orderbook's ask1 price.
+##' @param volume last trading volume.
+##' @param AGGREGATE specyfing wether to aggretate all buyer/seller initiated
+##' volumes together.
+##' @return a matrix of two columns corresponding to buyer and seller initialed
+##' order flow.
+##' @export
 BSI <- function(lastprice,bid1,ask1,volume,AGGREGATE=FALSE){
     mid <- (bid1+ask1)/2
     if(AGGREGATE){

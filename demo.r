@@ -87,13 +87,27 @@ TF1603  <- function(OMAX){
     
 }
 
+simpleMM <- function(){
+    submitmultilevelopen("TF1603",LEVELS = c(1,2),hands = 1,cancelallother = TRUE,DIRECTION = 1)
+    submitmultilevelopen("TF1603",LEVELS = c(1,2),hands = 1,cancelallother = TRUE,DIRECTION = -1)
+    chasecloseall("TF1603",chasesleep = 1)
+}
+
+
+
 HFTsimulator(stg = TF1603,OMAX=2,instrumentids = "TF1603",datalist = TFtaq,formatlist = TFformat,verboselimitpriors = TRUE)
+
+HFTsimulator(stg = simpleMM,instrumentids = "TF1603",datalist = TFtaq,formatlist = TFformat,verboselimitpriors = TRUE)
+
+source("miscellaneous.r")
 
 
 ## source from github
 source_url("https://raw.githubusercontent.com/chenhaotian/High-Frequency-Trading-Simulation-System/master/miscellaneous.r")
 
 res <- tradesummary(TFtaq,"TF1603",endtime = "11:30:00.000")
+
+res <- tradesummary(TFtaq,"TF1603",starttime = "09:30:00.000",endtime = "10:00:00.000")
 
 checklimit(instrumentdata = TFtaq,orderid = res$traded$orderid[81])
 checklimit(instrumentdata = TFtaq,orderid = res$traded$orderid[79])
