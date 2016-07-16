@@ -93,6 +93,10 @@ simpleMM <- function(){
     chasecloseall("TF1603",chasesleep = 1)
 }
 
+simpleMM <- function(){
+    BSI()
+}
+
 
 
 HFTsimulator(stg = TF1603,OMAX=2,instrumentids = "TF1603",datalist = TFtaq,formatlist = TFformat,verboselimitpriors = TRUE)
