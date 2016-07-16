@@ -123,9 +123,6 @@ summaryvpplot <- function(pd,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMM
 
     ## price and win/loss information
     p1 <- ggplot(pd)+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(ddinfo$starttag,ddinfo$endtag),],alpha=0.3,fill="blue")+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(lossinfo$starttag,lossinfo$endtag),],alpha=0.3,fill="steelblue")+
-        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(wininfo$starttag,wininfo$endtag),],alpha=0.3,fill="darkred")+
         geom_line(aes(x=tradetime,y=lastprice))+
         xlab(NULL)+ylab(NULL)+
         theme(plot.margin=unit(c(0.5,0.5,0,0.2),units = "in"))+
@@ -137,6 +134,11 @@ summaryvpplot <- function(pd,pl,dd,ddinfo,lossinfo,wininfo,os,ss,pds,traded,SUMM
         scale_x_datetime(label=NULL)+
         scale_color_identity()+
         scale_fill_identity()
+    if(SUMMARY){
+        p1 <- p1+geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(ddinfo$starttag,ddinfo$endtag),],alpha=0.3,fill="blue")+
+        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(lossinfo$starttag,lossinfo$endtag),],alpha=0.3,fill="steelblue")+
+        geom_rect(aes(xmin=tradetime[1],xmax= tradetime[2],ymin=MIN,ymax=MAX),data=pd[c(wininfo$starttag,wininfo$endtag),],alpha=0.3,fill="darkred")
+    }
 
     if(TRADED & nrow(traded)!=0){
         traded$tradetime <- as.POSIXct(traded$tradetime)
