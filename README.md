@@ -65,7 +65,7 @@ All order and capital change records will be stored in res1, type `names(res1)` 
 > names(res1)
 [1] "orderhistory" "capitalhistory" "queuingorders" "capital" "verbosepriors"
 ```
-+ **orderhistory**: a data.frame contains all the order change records, each record is with a status code taking values from one of `c(3,5,6,1,0)`, representing `'initial submit','canceled','failed','partially executed' and 'executed'` respectively. type `head(res1$orderhistory)` for a quick look of all the contents.
++ **orderhistory**: a data.frame contains all the order change records, each record is with a status code taking values from one of `c(3,5,6,1,0)`, representing `'initial submit','canceled','failed','partially executed' and 'executed'` respectively. type `head(res1$orderhistory)` for a quick look of all the components.
 + **capitalhisory**: a data.frame contains all capital change records. type `head(res1$capitalhistory)` for a quick look.
 + **queuingorders**: a data.frame of currently queuing orders, if `nrow(queuingorders)` is greater than zero, that means there are orders still queuing at the end of the simulation.
 + **capital**: a data.frame contains the final capital summary, including the final positions and cash status.
@@ -88,4 +88,4 @@ Simulator also contains information about how each limit order's status evolveme
 checklimit(instrumentdata = TFtaq,orderid = res2$traded$orderid[81]) #check the 81st traded limit order's life experience
 ```
 ![](./demo_pics/limitorder.png)
-Like `tradesummary()`, the graph prited by `checklimit()` also contains four pars, the first two pars are the same with the previous graph. The third part is all the orderbook change during the life interval of the 81st order, the fourth part is the amount change queuing ahead of the 81st order in the orderbook. In this example, it is shown in the graph that the short open order was submitted at 14:09:51.1 with price 100.795, there are 9 orders queuing ahead of it in the order book. The order is executed by a size-5 buyer initiated transaction at 14:09:55.6.
+Like `tradesummary()`, the graph printed by `checklimit()` also contains four pars, the first two pars are the same with the previous graph. The third part is all the orderbook change during the life interval of the 81st order, the fourth part is the amount change queuing ahead of the 81st order in the orderbook. In this example, it is shown in the graph that the short open order was submitted at 14:09:51.1 with price 100.795, there are 9 orders queuing ahead of it in the order book. The order is executed by a size-5 buyer initiated transaction at 14:09:55.6.
