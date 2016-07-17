@@ -33,9 +33,9 @@ source_url("https://raw.githubusercontent.com/chenhaotian/High-Frequency-Trading
 ## am
 ## res2 <- tradesummary(TFtaq,"TF1603",starttime = "09:15:00.000",endtime = "11:30:00.000")
 ## pm
-res2 <- tradesummary(TFtaq,"TF1603",starttime = "13:00:00.000",endtime = "15:15:00.000") #
+res2 <- tradesummary(TFtaq,"TF1603",starttime = "13:00:00.000",endtime = "15:15:00.000") #summary plot
 
 ## check details of some specific orders.
-checklimit(instrumentdata = TFtaq,orderid = res$traded$orderid[81])
-checklimit(instrumentdata = TFtaq,orderid = res$traded$orderid[79])
-checklimit(instrumentdata = TFtaq,orderid = res$traded$orderid[20])
+checklimit(instrumentdata = TFtaq,orderid = res2$traded$orderid[81]) #check the 81st traded limit order's life experience
+checklimit(instrumentdata = TFtaq,orderid = res2$traded$orderid[79])
+checklimit(instrumentdata = TFtaq,orderid = res2$traded$orderid[20])
