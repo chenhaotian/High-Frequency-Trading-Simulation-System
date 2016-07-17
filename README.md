@@ -29,7 +29,7 @@ The security identifiers must be in accordance with the corresponding column in 
 
 The TAQ data and format specification in the demo is contained in the package, they are named 'TFtaq' and 'TFformat' respectively, type `?TFtaq` and `?TFformat` for a rough idea of them, more details will be explained in later sections.
 
-The most important part is the strategy function, `HFTsimulator()` handles the strategy the same way as a [call-back function](https://en.wikipedia.org/wiki/Callback_(computer_programming). The function will be called at every arrival of a new data stream, details will be explained later. The demo strategy function should be written as follow:
+The most important part is the strategy function, `HFTsimulator()` handles the strategy the same way as a [call back function](https://en.wikipedia.org/wiki/Callback_(computer_programming). The function will be called at every arrival of a new data stream, details will be explained later. The demo strategy function should be written as follow:
 
 ```R
 ## a unrealistic demo strategy
@@ -88,4 +88,4 @@ Simulator also contains information about how each limit order's status evolveme
 checklimit(instrumentdata = TFtaq,orderid = res2$traded$orderid[81]) #check the 81st traded limit order's life experience
 ```
 ![](./demo_pics/limitorder.png)
-Like `tradesummary()`, the graph prited by `checklimit()` also contains four pars, the first two pars are the same with the previous graph. The third part is all the orderbook change during the life interval of the 81st order, the fourth part is the amout change queuing ahead of the 81st order in the orderbook. In this example, it is shown in the graph that the short open order was submitted at 14:09:51.1 with price 100.795, there are 9 orders queuing ahead of it in the order book. The order is executed by a size-5 buyer initiated transaction at 14:09:55.6.
+Like `tradesummary()`, the graph prited by `checklimit()` also contains four pars, the first two pars are the same with the previous graph. The third part is all the orderbook change during the life interval of the 81st order, the fourth part is the amount change queuing ahead of the 81st order in the orderbook. In this example, it is shown in the graph that the short open order was submitted at 14:09:51.1 with price 100.795, there are 9 orders queuing ahead of it in the order book. The order is executed by a size-5 buyer initiated transaction at 14:09:55.6.
