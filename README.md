@@ -2,7 +2,7 @@ HFT, A high-frequency trading simulation package in R.
 =======
 The goal of HFT is to make it easy to write and test high-frequency trading strategies.
 
-This package provides a simulated environment with most of the realworld operating rules. It also offers varies of order submitting, order flow tracking and summarization functions to simplify strategy writting process. After the simualtion, all intermediate information can be easily fethed and analyzed.
+This package provides a simulated environment with most of the realworld operating rules. It also offers varies of order submitting, order flow tracking and summarization functions to simplify strategy writting process. After the simualtion, all intermediate information can be easily fetched and analyzed.
 
 
 ### Installation
@@ -12,7 +12,7 @@ install_github("chenhaotian/High-Frequency-Trading-Simulation-System")
 ```
 
 ### Getting Started
-Let's first show how it works by a simple demo:
+Let's first show how it works by a simple demonstration:
 
 Assume a market-maker believe that the order flow of 03/16 treasury future contract(TF1603) has a strong positive auto-correlation. To avoid risk exposure and increase profit margin, the market-maker plan to place a buy/sell limit open order at bid1/ask1 whenever there is a relatively large spread and a small seller/buyer initiated transaction amount. All open orders will be canceled if they haven't been executed for 10 seconds. 
 
@@ -23,7 +23,7 @@ HFTsimulator(stg = strategy function,
              datalist = TAQ data,
              formatlist = TAQ data format)
 ```
-To start the simulation, one first need to prepare **a strategy function**, **security identifiers**, a **taq data set** and a **format specification**. 
+To start the simulation, one first need to prepare **a strategy function**, **security identifiers**, a **TAQ data set** and a **format specification**. 
 
 The security identifiers must be in accordance with the corresponding column in TAQ data, the column index is specified in TAQ data formant. Multiple securitied should be put into a character vector. Though this way of parameterization seems verbose, it makes it possible for the simulator to support any kind of TAQ data sets. There's only one security  named 'TF1603' in the demo, so the security identifier should be specified as `instrumentid='TF1606'`.
 
