@@ -25,7 +25,7 @@ HFTsimulator(stg = strategy function,
 ```
 To start the simulation, one first need to prepare **a strategy function**, **security identifiers**, a **taq data set** and a **format specification**. 
 
-The security identifiers must be in accordance with the corresponding column in TAQ data, the column index is specified in TAQ data formant. Multiple securitied should be put into a character vector. Though this way of parameterization seems verbose, it makes it possible for the simulator to support any kind of TAQ data sets. There's only one security  named 'TF1603' in the demo, so the security identifier should be specified as `instrumentid='TF1606'`.
+The security identifiers must be in accordance with the corresponding column in TAQ data, the column index is specified in TAQ data formant. Multiple securitied should be put into a character vector. Though this way of parameterization seems verbose, it makes it possible for the simulator to support any kind of TAQ data sets. There's only one security  named 'TF1603' in the demo, so the security identifier should be specified as `instrumentid='TF1603'`.
 
 The TAQ data and format specification in the demo is contained in the package, they are named 'TFtaq' and 'TFformat' respectively, type `?TFtaq` and `?TFformat` for a rough idea of them, more details will be explained in later sections.
 
