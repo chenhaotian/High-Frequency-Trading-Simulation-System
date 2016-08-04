@@ -4,6 +4,7 @@ The goal of HFT is to make it easy to write and test high-frequency trading stra
 
 This package provides a simulated environment with most of the real-world operating rules. It also offers varies of order submitting, order flow tracking and summarization functions to simplify strategy writing process. After the simulation, all intermediate information can be easily fetched and analyzed.
 
+[TOC "float:left"]
 
 ### Installation
 ```R
