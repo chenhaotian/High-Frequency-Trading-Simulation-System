@@ -13,7 +13,7 @@ install_github("chenhaotian/High-Frequency-Trading-Simulation-System")
 ```
 
 ### Getting Started
-Let's first show how it works by a simple demonstration:
+Let's first show how it works by a simple (unrealistic) demonstration:
 
 Assume a market-maker believe that the order flow of 03/16 treasury future contract(TF1603) has a strong positive auto-correlation. To avoid risk exposure and increase profit margin, the market-maker plan to place a buy/sell limit open order at bid1/ask1 whenever there is a relatively large spread and a small seller/buyer initiated transaction amount. All open orders will be canceled if they haven't been executed for 10 seconds. 
 
@@ -80,7 +80,7 @@ source_url("https://raw.githubusercontent.com/chenhaotian/High-Frequency-Trading
 res2 <- tradesummary(TFtaq,"TF1603",starttime = "13:00:00.000",endtime = "15:15:00.000") #summary plot
 ```
 Running the previous statement will get a graph of the strategy's summarized informations:
-![](./demo_pics/summary.png)
+![](https://raw.githubusercontent.com/chenhaotian/High-Frequency-Trading-Simulation-System/master/demo_pics/summary.png)
 
 There are four parts from top to bottom in the graph, they are price quotes, trading volume, P&L and draw-down respectively. The succseeive win and lose regin have been highlighted with red and blue in part 1 and 3. In part 2, each bar is filled with red or blue to indicate they are initiated by buyers or sellers. Also, there are three tables summarizing order execution and P&L informations showing in the top middle/top right/bottom right of the graph. Details are stored in `res2`, type `names(res2)` for more information.
 
@@ -88,5 +88,5 @@ Simulator also contains information about how each limit order's status evolveme
 ```R
 checklimit(instrumentdata = TFtaq,orderid = res2$traded$orderid[81]) #check the 81st traded limit order's life experience
 ```
-![](./demo_pics/limitorder.png)
+![](https://raw.githubusercontent.com/chenhaotian/High-Frequency-Trading-Simulation-System/master/demo_pics/limitorder.png)
 Like `tradesummary()`, the graph printed by `checklimit()` also contains four parts, the first two parts are the same with the previous graph. The third part is all the orderbook change snapshots during the life interval of the 81st order, the fourth part is the amount change queuing ahead of the 81st order in the orderbook. In this example, it is shown in the graph that the short open order was submitted at 14:09:51.1 with price 100.795, there are 9 orders queuing ahead of it in the order book. The order is executed by a size-5 buyer initiated transaction at 14:09:55.6.
